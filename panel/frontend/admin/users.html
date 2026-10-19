@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="section-head"><h2>Users</h2><div class="spacer"></div><input id="search" placeholder="Search users…" style="max-width:240px;"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Coins</th><th>Servers</th><th>Logins</th><th>Last login</th><th>Provider</th><th>Actions</th></tr></thead>
+        <tbody id="body"><tr><td colspan="9" class="center muted">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back" id="modal">
+  <div class="modal">
+    <h3 id="mTitle">Edit User</h3>
+    <div class="sub" id="mSub"></div>
+    <div class="field"><label>Username</label><input id="uName"></div>
+    <div class="field"><label>Email</label><input id="uEmail"></div>
+    <div class="field"><label>New password (leave blank to keep)</label><input id="uPass" type="password" placeholder="••••••••"></div>
+    <div class="field"><label>Role</label><select id="uRole"><option value="client">Client</option><option value="admin">Administrator</option></select></div>
+    <div class="actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="saveBtn">Save</button></div>
+  </div>
+</div>
+
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast, openModal, closeModal } = window.Nova;
+let users = [], editing = null;
+(async () => {
+  const user = await guard({ active: 'admin-users', requireAdmin: true, title: 'Users', subtitle: 'Accounts, roles and balances' });
+  if (!user) return;
+  await load();
+  document.getElementById('search').oninput = render;
+  document.getElementById('saveBtn').onclick = save;
+})();
+async function load() { users = (await API.get('/api/admin/users')).users; render(); }
+function render() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const list = users.filter(u => u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+  const body = document.getElementById('body');
+  body.innerHTML = list.length ? list.map(u => `<tr>
+    <td><div class="flex"><div class="avatar" style="width:32px;height:32px;border-radius:9px;background:var(--accent-grad);display:grid;place-items:center;font-weight:800;color:#04120a;font-size:12px;">${fmt.initials(u.username)}</div><b>${u.username}</b></div></td>
+    <td class="muted">${u.email}</td>
+    <td><span class="badge ${u.role === 'admin' ? 'badge-purple' : 'badge-blue'}">${u.role}</span></td>
+    <td><img class="ico-img" src="/assets/img/icons/coin.svg" alt=""> ${fmt.coins(u.coins)}</td>
+    <td>${u.servers}</td>
+    <td><span class="dot ${u.online ? 'dot-green' : 'dot-red'}" title="${u.online ? 'Online' : 'Offline'}"></span> <b>${u.loginCount}</b></td>
+    <td class="muted">${u.lastLoginAt ? fmt.rel(u.lastLoginAt) : 'never'}</td>
+    <td><span class="badge badge-grey">${u.provider}</span></td>
+    <td><button class="btn btn-sm" onclick="edit('${u.id}')">Edit</button> <button class="btn btn-sm btn-danger" onclick="del('${u.id}')">Delete</button></td>
+  </tr>`).join('') : '<tr><td colspan="9" class="center muted">No users found.</td></tr>';
+}
+function edit(id) {
+  editing = users.find(u => u.id === id);
+  document.getElementById('mTitle').textContent = 'Edit ' + editing.username;
+  document.getElementById('mSub').innerHTML = `Balance: <img class="ico-img" src="/assets/img/icons/coin.svg" alt=""> ${fmt.coins(editing.coins)} · ${editing.servers} servers`;
+  document.getElementById('uName').value = editing.username;
+  document.getElementById('uEmail').value = editing.email;
+  document.getElementById('uPass').value = '';
+  document.getElementById('uRole').value = editing.role;
+  openModal('modal');
+}
+async function save() {
+  const body = { username: document.getElementById('uName').value.trim(), email: document.getElementById('uEmail').value.trim(), role: document.getElementById('uRole').value };
+  const pass = document.getElementById('uPass').value; if (pass) body.password = pass;
+  try { await API.put('/api/admin/users/' + editing.id, body); toast('User updated'); closeModal('modal'); await load(); } catch (e) { toast(e.message, 'err'); }
+}
+async function del(id) { if (!confirm('Delete this user and their servers?')) return; try { await API.del('/api/admin/users/' + id); toast('Deleted'); await load(); } catch (e) { toast(e.message, 'err'); } }
+window.edit = edit; window.del = del;
+</script>
+</body>
+</html>

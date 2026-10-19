@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Node status · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css"></head>
+<body class="bg-panel"><div class="app"><aside class="sidebar" id="sidebar"></aside><div class="main"><header class="topbar" id="topbar"></header>
+<div class="content">
+  <div class="page-title"><h1>Is Diablo Panel <span style="color:var(--accent)">up?</span></h1><p>Live checks of every node. New nodes appear here automatically the moment an admin hosts them.</p></div>
+  <div class="card mb" id="overall"></div>
+  <div class="grid grid-4 mb" id="kpis"></div>
+  <div class="section-head"><h2>Nodes</h2></div>
+  <div class="grid grid-2" id="nodes"><div class="empty">Loading…</div></div>
+</div></div></div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard } = window.Nova;
+const LABEL = { online: 'Online', offline: 'Offline', pending: 'Waiting for Wings' };
+const DOT = { online: 'dot-green', offline: 'dot-red', pending: 'dot-amber' };
+async function load() {
+  let d; try { d = await API.get('/api/status'); } catch (e) { return; }
+  const ok = d.overall === 'operational', none = d.overall === 'none';
+  const txt = none ? 'No nodes hosted yet' : ok ? 'All systems operational' : d.overall === 'degraded' ? 'Partial outage' : 'Major outage';
+  document.getElementById('overall').innerHTML = `<div class="flex" style="justify-content:space-between;align-items:center">
+    <div class="flex" style="gap:12px;align-items:center"><span class="dot ${ok ? 'dot-green' : none ? 'dot-amber' : 'dot-red'}"></span><div><div class="muted" style="font-size:11px;letter-spacing:1px">CURRENT STATUS</div><h2>${txt}</h2></div></div>
+    <div class="muted" style="font-size:12px;text-align:right">Last check<br><b style="color:var(--text)">${fmt.dateTime(d.checkedAt)}</b></div></div>`;
+  document.getElementById('kpis').innerHTML = [
+    ['Nodes online', `${d.nodesOnline} / ${d.nodesTotal}`], ['Uptime (recent)', d.uptime === null ? '—' : d.uptime + '%'],
+    ['Checks', 'every 60s'], ['Free hosting', 'Active']
+  ].map(([l, v]) => `<div class="card"><div class="stat"><div><div class="val">${v}</div><div class="lbl">${l}</div></div></div></div>`).join('');
+  document.getElementById('nodes').innerHTML = d.nodes.length ? d.nodes.map(n => `<div class="card">
+    <div class="flex" style="justify-content:space-between;align-items:center">
+      <div><b>${n.name}</b> <span class="muted" style="font-size:12px">${n.location || ''}</span>
+      <div class="muted" style="font-size:12px">${n.uptime === null ? 'No data yet' : n.uptime + '% uptime'} · ${n.servers} servers · ${n.freePorts} free ports</div></div>
+      <span class="badge ${n.status === 'online' ? 'badge-green' : n.status === 'offline' ? 'badge-red' : 'badge-amber'}"><span class="dot ${DOT[n.status]}"></span>${LABEL[n.status]}</span></div>
+    <div class="bars mt-s">${n.history.map(h => `<i class="${h === 'up' ? '' : h === 'down' ? 'down' : 'none'}"></i>`).join('')}</div>
+    <div class="flex muted" style="justify-content:space-between;font-size:11px;margin-top:4px"><span>Past</span><span>Now</span></div></div>`).join('')
+    : '<div class="empty">Add a node in Admin → Nodes and it will show up here automatically.</div>';
+}
+(async () => { if (!(await guard({ active: 'status', title: 'Node status', subtitle: 'Live node health' }))) return; load(); setInterval(load, 15000); })();
+</script></body></html>

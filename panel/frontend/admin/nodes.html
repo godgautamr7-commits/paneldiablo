@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nodes · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="section-head">
+        <h2>Nodes</h2>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="newNodeBtn">＋ Create Node</button>
+      </div>
+      <div class="alert alert-info">Create a node here, add its IP and ports on the node page (Allocation tab), then run <code>node-setup.sh</code> on the machine and paste the command from the node's Configuration tab.</div>
+      <div class="grid grid-2" id="nodeGrid"><div class="empty"><div class="big"><img class="ico-img" src="/assets/img/icons/clock.svg" alt=""></div>Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Create / edit node -->
+<div class="modal-back" id="nodeModal">
+  <div class="modal">
+    <h3>Create Node</h3>
+    <div class="sub">A node is a machine that runs your Minecraft servers via Wings.</div>
+    <div class="field"><label>Node name</label><input id="nName" placeholder="EU-Frankfurt-1"></div>
+    <div class="field"><label>Description</label><input id="nDesc" placeholder="Optional"></div>
+    <div class="row">
+      <div class="field"><label>FQDN / Hostname</label><input id="nFqdn" placeholder="node1.example.com"></div>
+      <div class="field"><label>IP address</label><input id="nIp" placeholder="203.0.113.10"></div>
+    </div>
+    <div class="row-3">
+      <div class="field"><label>Daemon port</label><input id="nPort" type="number" value="8080"></div>
+      <div class="field"><label>Scheme</label><select id="nScheme"><option>https</option><option>http</option></select></div>
+      <div class="field"><label>Location</label><input id="nLoc" placeholder="Frankfurt, DE"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Memory (MB)</label><input id="nMem" type="number" value="16384"></div>
+      <div class="field"><label>Disk (MB)</label><input id="nDisk" type="number" value="102400"></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-ghost" data-close>Cancel</button>
+      <button class="btn btn-primary" id="nodeSave">Create node</button>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, guard, toast, openModal, closeModal } = window.Nova;
+let nodes = [];
+(async () => {
+  const user = await guard({ active: 'admin-nodes', requireAdmin: true, title: 'Nodes', subtitle: 'Multi-node infrastructure management' });
+  if (!user) return;
+  await load();
+  document.getElementById('newNodeBtn').onclick = openNodeModal;
+  document.getElementById('nodeSave').onclick = saveNode;
+})();
+async function load() { nodes = (await API.get('/api/admin/nodes')).nodes; render(); }
+function render() {
+  const grid = document.getElementById('nodeGrid');
+  if (!nodes.length) { grid.innerHTML = '<div class="empty" style="grid-column:1/-1;"><div class="big"><img class="ico-img" src="/assets/img/icons/globe.svg" alt=""></div>No nodes yet. Create your first node.</div>'; return; }
+  grid.innerHTML = nodes.map(n => `
+    <div class="card tile">
+      <div class="flex wrap" style="justify-content:space-between;">
+        <div class="top"><div class="ic"><img class="ico-img" src="/assets/img/icons/globe.svg" alt=""></div><div><div class="name">${n.name}</div><div class="cat">${n.location} · ${n.scheme}://${n.fqdn}:${n.daemonPort}</div></div></div>
+        <span class="badge ${n.status === 'online' ? 'badge-green' : n.status === 'pending' ? 'badge-amber' : 'badge-red'}"><span class="dot ${n.status === 'online' ? 'dot-green' : n.status === 'pending' ? 'dot-amber' : 'dot-red'}"></span>${n.status}</span>
+      </div>
+      <div class="specs">
+        <span class="spec">IP ${n.ip}</span>
+        <span class="spec">${(n.memory/1024).toFixed(0)} GB RAM</span>
+        <span class="spec">${(n.disk/1024).toFixed(0)} GB disk</span>
+        <span class="spec">${n.servers} servers</span>
+      </div>
+      <div class="kv"><span class="k">Allocations</span><span class="v">${n.allocationsUsed}/${n.allocationsTotal} used</span></div>
+      <div class="kv"><span class="k">Heartbeat</span><span class="v">${n.lastHeartbeat ? window.Nova.fmt.rel(n.lastHeartbeat) : 'never'}</span></div>
+      <div class="kv"><span class="k">Wings</span><span class="v">${n.daemonVersion ? 'v' + n.daemonVersion : 'not connected'}</span></div>
+      <div class="foot wrap">
+        <a class="btn btn-sm" href="/admin/node.html?id=${n.id}"><img class="ico-img" src="/assets/img/icons/gear.svg" alt=""> Manage</a>
+        <div class="spacer" style="flex:1"></div>
+        <button class="btn btn-sm btn-danger" onclick="delNode('${n.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+function openNodeModal() {
+  ['nName', 'nDesc', 'nFqdn', 'nIp', 'nLoc'].forEach(i => document.getElementById(i).value = '');
+  document.getElementById('nPort').value = 8080; document.getElementById('nScheme').value = 'https';
+  document.getElementById('nMem').value = 16384; document.getElementById('nDisk').value = 102400;
+  openModal('nodeModal');
+}
+async function saveNode() {
+  const body = {
+    name: document.getElementById('nName').value.trim(),
+    description: document.getElementById('nDesc').value.trim(),
+    fqdn: document.getElementById('nFqdn').value.trim(),
+    ip: document.getElementById('nIp').value.trim(),
+    daemonPort: Number(document.getElementById('nPort').value),
+    scheme: document.getElementById('nScheme').value,
+    location: document.getElementById('nLoc').value.trim(),
+    memory: Number(document.getElementById('nMem').value),
+    disk: Number(document.getElementById('nDisk').value)
+  };
+  if (!body.name || !body.fqdn) return toast('Name and FQDN are required', 'err');
+  try {
+    const r = await API.post('/api/admin/nodes', body);
+    location.href = '/admin/node.html?id=' + r.node.id + '#configuration';
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function delNode(id) {
+  if (!confirm('Delete this node?')) return;
+  try { await API.del('/api/admin/nodes/' + id); toast('Node deleted'); await load(); } catch (e) { toast(e.message, 'err'); }
+}
+window.delNode = delNode;
+</script>
+</body>
+</html>

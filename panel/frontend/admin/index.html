@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Overview · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-dashboard">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="grid grid-4 mb" id="stats"></div>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>Infrastructure</h3>
+          <div class="muted mb">Node health across your fleet.</div>
+          <div id="nodeHealth"></div>
+        </div>
+        <div class="card">
+          <h3>Quick actions</h3>
+          <div class="muted mb">Common administration tasks.</div>
+          <div class="grid grid-2">
+            <a class="btn" href="/admin/nodes.html"><img class="ico-img" src="/assets/img/icons/globe.svg" alt=""> Manage Nodes</a>
+            <a class="btn" href="/admin/products.html"><img class="ico-img" src="/assets/img/icons/gift.svg" alt=""> Products</a>
+            <a class="btn" href="/admin/users.html"><img class="ico-img" src="/assets/img/icons/users.svg" alt=""> Users</a>
+            <a class="btn" href="/admin/coins.html"><img class="ico-img" src="/assets/img/icons/coin.svg" alt=""> Coin Manager</a>
+          </div>
+        </div>
+      </div>
+      <div class="section-head mt"><h2>Recent Servers</h2><div class="spacer"></div><a class="btn btn-sm" href="/admin/servers.html">View all</a></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Server</th><th>Owner</th><th>Node</th><th>Address</th><th>Status</th></tr></thead>
+        <tbody id="srvBody"><tr><td colspan="5" class="center muted">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard } = window.Nova;
+(async () => {
+  const user = await guard({ active: 'admin-index', requireAdmin: true, title: 'Admin Overview', subtitle: 'Fleet-wide statistics and health' });
+  if (!user) return;
+  const stats = await API.get('/api/admin/stats');
+  const cards = [
+    { ico: '<img class="ico-img" src="/assets/img/icons/users.svg" alt="">', val: stats.users, lbl: 'Total users' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/globe.svg" alt="">', val: stats.nodesOnline + '/' + stats.nodes, lbl: 'Nodes online' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/server.svg" alt="">', val: stats.serversRunning + '/' + stats.servers, lbl: 'Servers running' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/coin.svg" alt="">', val: fmt.coins(stats.coinsInCirculation), lbl: 'Coins in circulation' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/user.svg" alt="">', val: stats.onlineNow, lbl: 'Users online now' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/activity.svg" alt="">', val: stats.loginsToday + ' <small style="font-size:13px;color:var(--text-mute)">(' + stats.uniqueToday + ' unique)</small>', lbl: 'Logins today' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/lock.svg" alt="">', val: fmt.coins(stats.totalLogins), lbl: 'Total logins' }
+  ];
+  const mx = Math.max(1, ...stats.loginDays.map(d => d.logins));
+  window.__loginChart = `<div class="card mb"><h3>Logins — last 7 days</h3><div class="muted mb">How many times users signed in each day</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:10px;align-items:end;height:120px">${stats.loginDays.map(d => `<div style="text-align:center"><div style="font-size:12px;font-weight:700">${d.logins}</div><div style="height:${Math.max(4, d.logins / mx * 80)}px;background:var(--accent-grad);border-radius:6px 6px 2px 2px;margin:4px 0"></div><div class="muted" style="font-size:11px">${d.day.slice(5)}</div></div>`).join('')}</div></div>`;
+  document.getElementById('stats').innerHTML = cards.map(c => `<div class="card"><div class="stat"><div class="ico">${c.ico}</div><div><div class="val">${c.val}</div><div class="lbl">${c.lbl}</div></div></div></div>`).join('');
+  document.getElementById('stats').insertAdjacentHTML('afterend', window.__loginChart);
+  const { nodes } = await API.get('/api/admin/nodes');
+  document.getElementById('nodeHealth').innerHTML = nodes.length ? nodes.map(n => `
+    <div class="kv"><span class="k"><span class="dot ${n.status === 'online' ? 'dot-green' : 'dot-red'}"></span> ${n.name} <code>${n.ip}:${n.daemonPort}</code></span>
+    <span class="v">${n.allocationsUsed}/${n.allocationsTotal} alloc · ${n.servers} srv</span></div>`).join('') : '<div class="muted">No nodes configured.</div>';
+  const { servers } = await API.get('/api/admin/servers');
+  const tbody = document.getElementById('srvBody');
+  tbody.innerHTML = servers.length ? servers.slice(-8).reverse().map(s => `<tr>
+    <td><b>${s.name}</b></td><td>${s.owner}</td><td>${s.node}</td>
+    <td><code>${s.allocation ? s.allocation.ip + ':' + s.allocation.port : '—'}</code></td>
+    <td><span class="badge ${s.status === 'running' ? 'badge-green' : 'badge-grey'}">${s.status}</span></td>
+  </tr>`).join('') : '<tr><td colspan="5" class="center muted">No servers yet.</td></tr>';
+})();
+</script>
+</body>
+</html>

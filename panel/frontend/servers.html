@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Servers · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="section-head">
+        <h2>My Servers</h2>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="newServerBtn">＋ Create Server</button>
+      </div>
+      <div id="serverList"><div class="empty"><div class="big"><img class="ico-img" src="/assets/img/icons/clock.svg" alt=""></div>Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Create server modal -->
+<div class="modal-back" id="createModal">
+  <div class="modal">
+    <h3>Create a new server</h3>
+    <div class="sub">Choose a plan. Free plans cost nothing; paid plans are charged in coins.</div>
+    <div class="field">
+      <label>Server name</label>
+      <input type="text" id="srvName" placeholder="My Survival World">
+    </div>
+    <div class="field">
+      <label>Plan / Product</label>
+      <select id="srvProduct"></select>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Node</label>
+        <select id="srvNode"></select>
+      </div>
+      <div class="field">
+        <label>RAM upgrade</label>
+        <select id="srvUpgrade"></select>
+      </div>
+    </div>
+    <div id="createInfo" class="alert alert-info"></div>
+    <div class="actions">
+      <button class="btn btn-ghost" data-close>Cancel</button>
+      <button class="btn btn-primary" id="createConfirm">Create server</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage modal -->
+<div class="modal-back" id="manageModal">
+  <div class="modal">
+    <h3 id="mTitle">Server</h3>
+    <div class="sub" id="mSub"></div>
+    <div id="mBody"></div>
+    <div class="actions"><button class="btn btn-ghost" data-close>Close</button></div>
+  </div>
+</div>
+
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast, openModal, closeModal } = window.Nova;
+let products = [], nodes = [], servers = [];
+
+(async () => {
+  const user = await guard({ active: 'servers', title: 'My Servers', subtitle: 'Deploy and manage your Minecraft instances' });
+  if (!user) return;
+  await Promise.all([loadProducts(), loadNodes()]);
+  await loadServers();
+  buildCreateForm();
+  document.getElementById('newServerBtn').onclick = () => openModal('createModal');
+  if (new URLSearchParams(location.search).get('new')) setTimeout(() => openModal('createModal'), 400);
+  document.getElementById('createConfirm').onclick = createServer;
+})();
+
+async function loadProducts() { try { products = (await API.get('/api/client/store')).products; } catch (e) {} }
+async function loadNodes() {
+  try {
+    // clients can read nodes via store fallback; use admin-free endpoint
+    const r = await API.get('/api/client/servers');
+    nodes = [];
+  } catch (e) {}
+  try {
+    // public node list for selection
+    const r = await API.get('/api/client/nodes').catch(() => null);
+    if (r) nodes = r.nodes;
+  } catch (e) {}
+}
+
+function buildCreateForm() {
+  const p = document.getElementById('srvProduct');
+  p.innerHTML = products.map(pr => `<option value="${pr.id}">${pr.name} — ${pr.free ? 'FREE' : pr.price + ' coins'} · ${fmt.mb(pr.memory)} / ${pr.cpu}% / ${fmt.mb(pr.disk)}</option>`).join('');
+  p.onchange = updateCreateInfo;
+  const n = document.getElementById('srvNode');
+  n.innerHTML = '<option value="">Auto (best available)</option>' + nodes.map(nd => `<option value="${nd.id}">${nd.name} (${nd.ip})</option>`).join('');
+  updateCreateInfo();
+}
+
+function updateCreateInfo() {
+  const pr = products.find(x => x.id === document.getElementById('srvProduct').value);
+  const up = document.getElementById('srvUpgrade');
+  if (pr) {
+    up.innerHTML = '<option value="0">Base plan</option>' + (pr.upgradeOptions || []).map(g => `<option value="${g}">+${g} GB RAM</option>`).join('');
+    document.getElementById('createInfo').innerHTML = `Plan: <b>${pr.name}</b> · ${fmt.mb(pr.memory)} RAM, ${pr.cpu}% CPU, ${fmt.mb(pr.disk)} disk · ${pr.free ? '<b style="color:#5fe39a">FREE</b>' : '<b class="price-tag">'+pr.price+' coins</b>'} · Expires in ${pr.expiryDays} days`;
+  }
+}
+
+async function loadServers() {
+  const wrap = document.getElementById('serverList');
+  try {
+    servers = (await API.get('/api/client/servers')).servers;
+    if (!servers.length) { wrap.innerHTML = `<div class="card empty"><div class="big"><img class="ico-img" src="/assets/img/icons/server.svg" alt=""></div>No servers yet. Click <b>Create Server</b> to get started.</div>`; return; }
+    wrap.innerHTML = servers.map(s => `
+      <div class="card tile mb">
+        <div class="flex wrap" style="justify-content:space-between;">
+          <div class="top">
+            <div class="ic"><img class="ico-img" src="/assets/img/icons/grid.svg" alt=""></div>
+            <div><div class="name">${s.name}</div><div class="cat">${s.productName} · ${s.nodeName}</div></div>
+          </div>
+          <div class="flex">
+            <span class="badge ${s.status === 'running' ? 'badge-green' : 'badge-grey'}"><span class="dot ${s.status === 'running' ? 'dot-green' : 'dot-grey'}"></span>${s.status}</span>
+          </div>
+        </div>
+        <div class="specs">
+          <span class="spec">${fmt.mb(s.memory)} RAM</span>
+          <span class="spec">${s.cpu}% CPU</span>
+          <span class="spec">${fmt.mb(s.disk)} disk</span>
+          <span class="spec">v${s.version}</span>
+          ${s.modpack ? `<span class="spec"><img class="ico-img" src="/assets/img/icons/package.svg" alt=""> ${s.modpack.name}</span>` : ''}
+          <span class="spec"><img class="ico-img" src="/assets/img/icons/puzzle.svg" alt=""> ${s.plugins.length} plugins</span>
+        </div>
+        <div class="kv"><span class="k">Address</span><span class="v"><code>${s.address}</code></span></div>
+        ${s.expiresAt ? `<div class="kv"><span class="k">Expires</span><span class="v">${fmt.date(s.expiresAt)}</span></div>` : ''}
+        <div class="foot wrap">
+          <button class="btn btn-sm" onclick="power('${s.id}','start')"><img class="ico-img" src="/assets/img/icons/play.svg" alt=""> Start</button>
+          <button class="btn btn-sm" onclick="power('${s.id}','restart')"><img class="ico-img" src="/assets/img/icons/restart.svg" alt=""> Restart</button>
+          <button class="btn btn-sm btn-danger" onclick="power('${s.id}','stop')"><img class="ico-img" src="/assets/img/icons/stop.svg" alt=""> Stop</button>
+          <div class="spacer" style="flex:1"></div>
+          <button class="btn btn-sm" onclick="location.href='/server.html?id=${s.id}'"><img class="ico-img" src="/assets/img/icons/terminal.svg" alt=""> Manage</button>
+        </div>
+      </div>`).join('');
+  } catch (e) { wrap.innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+async function power(id, action) {
+  try { await API.post('/api/client/servers/' + id + '/power', { action }); toast('Server ' + action + ' sent'); await loadServers(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function createServer() {
+  const name = document.getElementById('srvName').value.trim();
+  if (!name) return toast('Enter a server name', 'err');
+  const body = {
+    name,
+    productId: document.getElementById('srvProduct').value,
+    nodeId: document.getElementById('srvNode').value || undefined,
+    upgradeRam: document.getElementById('srvUpgrade').value
+  };
+  const btn = document.getElementById('createConfirm'); btn.disabled = true; btn.innerHTML = '<span class="loading"></span>';
+  try {
+    await API.post('/api/client/servers', body);
+    toast('Server created!');
+    closeModal('createModal');
+    document.getElementById('srvName').value = '';
+    await loadServers();
+  } catch (e) { toast(e.message, 'err'); }
+  btn.disabled = false; btn.textContent = 'Create server';
+}
+
+async function manage(id) {
+  const s = servers.find(x => x.id === id);
+  document.getElementById('mTitle').textContent = s.name;
+  document.getElementById('mSub').innerHTML = `Address <code>${s.address}</code> · Node ${s.nodeName}`;
+  const [plugins, modpacks, versions] = await Promise.all([
+    API.get('/api/client/plugins').then(r => r.plugins).catch(() => []),
+    API.get('/api/client/modpacks').then(r => r.modpacks).catch(() => []),
+    API.get('/api/client/versions').then(r => r.versions).catch(() => [])
+  ]);
+  const installed = s.plugins.map(p => p.id);
+  document.getElementById('mBody').innerHTML = `
+    <div class="section-head"><h3>Version</h3></div>
+    <div class="flex wrap">
+      <select id="mVersion" style="max-width:200px;">${versions.map(v => `<option ${v.version === s.version ? 'selected' : ''}>${v.version}</option>`).join('')}</select>
+      <button class="btn btn-sm btn-primary" onclick="setVersion('${s.id}')">Change version</button>
+    </div>
+    <div class="section-head mt"><h3>Modpack</h3></div>
+    <div class="flex wrap">
+      <select id="mModpack" style="max-width:260px;">${modpacks.map(m => `<option value="${m.id}">${m.name} (${m.loader} ${m.mcVersion})</option>`).join('')}</select>
+      <button class="btn btn-sm btn-primary" onclick="setModpack('${s.id}')">Install modpack</button>
+    </div>
+    ${s.modpack ? `<div class="muted mt-s">Current: <b>${s.modpack.name}</b></div>` : ''}
+    <div class="section-head mt"><h3>Plugins (${s.plugins.length})</h3></div>
+    <div class="flex wrap" style="gap:8px;">
+      ${plugins.map(p => installed.includes(p.id)
+        ? `<button class="btn btn-sm btn-danger" onclick="removePlugin('${s.id}','${p.id}')"><img class="ico-img" src="/assets/img/icons/check.svg" alt=""> ${p.name} — remove</button>`
+        : `<button class="btn btn-sm" onclick="addPlugin('${s.id}','${p.id}')">＋ ${p.name}</button>`).join('')}
+    </div>`;
+  openModal('manageModal');
+}
+
+async function setVersion(id) {
+  try { await API.post('/api/client/servers/' + id + '/version', { version: document.getElementById('mVersion').value }); toast('Version changed'); await loadServers(); closeModal('manageModal'); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function setModpack(id) {
+  try { await API.post('/api/client/servers/' + id + '/modpack', { modpackId: document.getElementById('mModpack').value }); toast('Modpack installed'); await loadServers(); closeModal('manageModal'); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function addPlugin(sid, pid) {
+  try { await API.post('/api/client/servers/' + sid + '/plugins', { pluginId: pid }); toast('Plugin installed'); await loadServers(); manage(sid); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function removePlugin(sid, pid) {
+  try { await API.del('/api/client/servers/' + sid + '/plugins/' + pid); toast('Plugin removed'); await loadServers(); manage(sid); }
+  catch (e) { toast(e.message, 'err'); }
+}
+window.power = power; window.manage = manage; window.setVersion = setVersion; window.setModpack = setModpack; window.addPlugin = addPlugin; window.removePlugin = removePlugin;
+</script>
+</body>
+</html>

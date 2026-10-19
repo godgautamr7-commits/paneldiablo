@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create account · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-login">
+<div class="auth-wrap">
+  <div class="auth-hero">
+    <div class="brand">
+      <div class="logo" style="width:52px;height:52px;"><img class="ico-img" src="/assets/img/logo.svg" alt=""></div>
+      <div style="font-weight:800;font-size:20px;">Diablo Panel <small style="display:block;font-size:11px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;">Game Hosting Panel</small></div>
+    </div>
+    <h1>Start hosting in <span>minutes</span>.</h1>
+    <p>Create your free account, claim your starter server and install plugins, modpacks or change versions with a single click.</p>
+    <div class="features">
+      <div class="feature"><div class="ico"><img class="ico-img" src="/assets/img/icons/gift.svg" alt=""></div><div><b>Free starter plan</b>2GB RAM, 1 vCore and 10GB disk at no cost.</div></div>
+      <div class="feature"><div class="ico"><img class="ico-img" src="/assets/img/icons/bolt.svg" alt=""></div><div><b>Instant setup</b>Servers deploy on the fastest available node automatically.</div></div>
+      <div class="feature"><div class="ico"><img class="ico-img" src="/assets/img/icons/coin.svg" alt=""></div><div><b>Earn while AFK</b>Collect coins over time and upgrade your server.</div></div>
+    </div>
+  </div>
+
+  <div class="auth-panel">
+    <div class="auth-card">
+      <h2>Create your account</h2>
+      <div class="sub">It only takes a moment</div>
+      <div id="errBox" class="alert alert-err hidden"></div>
+      <form id="regForm">
+        <div class="field">
+          <label for="username">Username</label>
+          <input type="text" id="username" placeholder="Steve" required>
+        </div>
+        <div class="field">
+          <label for="email">Email address</label>
+          <input type="email" id="email" placeholder="you@example.com" required>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="At least 6 characters" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Create account</button>
+      </form>
+      <div class="divider">or sign up with</div>
+      <div class="oauth-row">
+        <button class="oauth-btn" id="googleBtn">
+          <svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.1-11.3-7.6l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2C41 35.9 44 30.5 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+          Google
+        </button>
+        <button class="oauth-btn" id="discordBtn">
+          <svg viewBox="0 0 24 24" fill="#5865F2"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4c1.7.4 2.5.9 3.3 1.4a13.9 13.9 0 0 0-12.9 0c.8-.5 1.7-1 3.3-1.4L8.6 3a19.8 19.8 0 0 0-4.9 1.4C1.4 9 .7 13.5 1 17.9A19.9 19.9 0 0 0 7 21l.8-1.2c-.9-.3-1.7-.7-2.5-1.3l.6-.5a14.2 14.2 0 0 0 12.2 0l.6.5c-.8.6-1.6 1-2.5 1.3L17 21a19.9 19.9 0 0 0 6-3.1c.4-5.1-.7-9.5-2.7-13.5zM8.7 15.3c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>
+          Discord
+        </button>
+      </div>
+      <p class="center muted mt" style="font-size:13px;">Already have an account? <a href="/login.html" style="color:var(--accent-2);font-weight:600;">Sign in</a></p>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API } = window.Nova;
+(async () => {
+  try {
+    const cfg = await API.get('/api/config');
+    const g = document.getElementById('googleBtn'), d = document.getElementById('discordBtn');
+    if (!cfg.oauth.google) { g.classList.add('disabled'); g.title = 'Google OAuth not configured'; } else g.onclick = () => location.href = '/api/auth/oauth/google';
+    if (!cfg.oauth.discord) { d.classList.add('disabled'); d.title = 'Discord OAuth not configured'; } else d.onclick = () => location.href = '/api/auth/oauth/discord';
+  } catch (e) {}
+})();
+document.getElementById('regForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn'), box = document.getElementById('errBox');
+  box.classList.add('hidden'); btn.disabled = true; btn.innerHTML = '<span class="loading"></span>';
+  try {
+    await API.post('/api/auth/register', {
+      username: document.getElementById('username').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('password').value
+    });
+    location.href = '/dashboard.html';
+  } catch (err) {
+    box.textContent = err.message; box.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Create account';
+  }
+});
+</script>
+</body>
+</html>

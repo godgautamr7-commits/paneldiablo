@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All Servers · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="section-head"><h2>All Servers</h2><div class="spacer"></div><input id="search" placeholder="Search…" style="max-width:240px;"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Server</th><th>Owner</th><th>Node</th><th>Address</th><th>Resources</th><th>Version</th><th>Status</th></tr></thead>
+        <tbody id="body"><tr><td colspan="7" class="center muted">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard } = window.Nova;
+let servers = [];
+(async () => {
+  const user = await guard({ active: 'admin-servers', requireAdmin: true, title: 'All Servers', subtitle: 'Every instance across the fleet' });
+  if (!user) return;
+  servers = (await API.get('/api/admin/servers')).servers;
+  document.getElementById('search').oninput = render;
+  render();
+})();
+function render() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const list = servers.filter(s => s.name.toLowerCase().includes(q) || (s.owner||'').toLowerCase().includes(q));
+  document.getElementById('body').innerHTML = list.length ? list.map(s => `<tr>
+    <td><b>${s.name}</b></td><td>${s.owner}</td><td>${s.node}</td>
+    <td><code>${s.allocation ? s.allocation.ip+':'+s.allocation.port : '—'}</code></td>
+    <td class="muted">${fmt.mb(s.memory)} / ${s.cpu}% / ${fmt.mb(s.disk)}</td>
+    <td>v${s.version}</td>
+    <td><span class="badge ${s.status==='running'?'badge-green':'badge-grey'}">${s.status}</span></td>
+  </tr>`).join('') : '<tr><td colspan="7" class="center muted">No servers.</td></tr>';
+}
+</script>
+</body>
+</html>

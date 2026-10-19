@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coupons · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="grid grid-2 mb">
+        <div class="card">
+          <h3>Create coupon</h3>
+          <div class="muted mb">Give coins to players. Set how many users can redeem it and when it expires.</div>
+          <div class="row">
+            <div class="field"><label>Code <span class="muted">(blank = random)</span></label><input id="cCode" placeholder="WELCOME500"></div>
+            <div class="field"><label>Coins per user</label><input id="cCoins" type="number" value="500"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Max users</label><input id="cMax" type="number" value="10"></div>
+            <div class="field"><label>Expires in (days, 0 = never)</label><input id="cDays" type="number" value="7"></div>
+          </div>
+          <div class="field"><label>Note</label><input id="cNote" placeholder="Giveaway, event, etc."></div>
+          <button class="btn btn-primary" id="createBtn">Create coupon</button>
+        </div>
+        <div class="card" id="cStats"></div>
+      </div>
+      <div class="section-head"><h2>All coupons</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Code</th><th>Coins</th><th>Used</th><th>Expires</th><th>Status</th><th>Redeemed by</th><th>Actions</th></tr></thead>
+        <tbody id="body"><tr><td colspan="7" class="center muted">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast } = window.Nova;
+let coupons = [];
+(async () => {
+  const user = await guard({ active: 'admin-coupons', requireAdmin: true, title: 'Coupons', subtitle: 'Redeem codes that give coins' });
+  if (!user) return;
+  document.getElementById('createBtn').onclick = create;
+  load();
+})();
+async function load() {
+  coupons = (await API.get('/api/admin/coupons')).coupons;
+  const given = coupons.reduce((a, c) => a + c.uses * c.coins, 0);
+  const live = coupons.filter(c => c.active && !c.expired && !c.full).length;
+  document.getElementById('cStats').innerHTML = `<h3>Overview</h3><div class="muted mb">Coupon activity</div><div class="grid grid-3">
+    <div><div class="val" style="font-size:26px;font-weight:800">${coupons.length}</div><div class="muted">Total</div></div>
+    <div><div class="val" style="font-size:26px;font-weight:800">${live}</div><div class="muted">Active</div></div>
+    <div><div class="val" style="font-size:26px;font-weight:800">${fmt.coins(given)}</div><div class="muted">Coins given</div></div></div>`;
+  document.getElementById('body').innerHTML = coupons.length ? coupons.map(c => {
+    const st = !c.active ? ['badge-grey', 'Disabled'] : c.expired ? ['badge-red', 'Expired'] : c.full ? ['badge-amber', 'Fully used'] : ['badge-green', 'Active'];
+    return `<tr><td><code>${c.code}</code><div class="muted" style="font-size:12px">${c.note || ''}</div></td>
+      <td>${window.Nova.ic('coin')} ${fmt.coins(c.coins)}</td>
+      <td><b>${c.uses}</b> / ${c.maxUses}</td>
+      <td class="muted">${c.expiresAt ? fmt.dateTime(c.expiresAt) : 'Never'}</td>
+      <td><span class="badge ${st[0]}">${st[1]}</span></td>
+      <td class="muted" style="max-width:200px">${c.redemptions.map(r => r.username).join(', ') || '—'}</td>
+      <td><button class="btn btn-sm" onclick="toggle('${c.id}',${!c.active})">${c.active ? 'Disable' : 'Enable'}</button> <button class="btn btn-sm btn-danger" onclick="del('${c.id}')">Delete</button></td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="center muted">No coupons yet. Create one on the left.</td></tr>';
+}
+async function create() {
+  try {
+    const r = await API.post('/api/admin/coupons', { code: cCode.value, coins: cCoins.value, maxUses: cMax.value, expiryDays: cDays.value, note: cNote.value });
+    toast('Coupon created: ' + r.coupon.code); cCode.value = ''; cNote.value = ''; load();
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function toggle(id, active) { await API.put('/api/admin/coupons/' + id, { active }); load(); }
+async function del(id) { if (!confirm('Delete this coupon?')) return; await API.del('/api/admin/coupons/' + id); load(); }
+</script>
+</body>
+</html>

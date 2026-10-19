@@ -1,0 +1,7 @@
+{
+  "name": "diablo-wings",
+  "version": "1.0.0",
+  "description": "Diablo Panel Wings - node agent for Minecraft servers",
+  "main": "wings.js",
+  "scripts": { "start": "node wings.js" }
+}

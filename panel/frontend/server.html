@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Server · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css"></head>
+<body class="bg-panel"><div class="app"><aside class="sidebar" id="sidebar"></aside><div class="main"><header class="topbar" id="topbar"></header>
+<div class="content">
+  <div class="card mb" id="head"></div>
+  <div class="grid grid-3 mb" id="res"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="pane"></div>
+</div></div></div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast, ic } = window.Nova;
+const qs = new URLSearchParams(location.search); const id = qs.get('id');
+const base = '/api/client/servers/' + id;
+let vmin = {}, fdir = '', sws = null, sv, tab = qs.get('tab') || 'console', modpacks = [], plugins = [], versions = [], hist = [], hi = 0, cpu = 0;
+const TABS = [['console', 'terminal', 'Console'], ['files', 'folder', 'Files'], ['databases', 'server', 'Databases'], ['schedules', 'clock', 'Schedules'], ['users', 'users', 'Users'], ['backups', 'archive', 'Backups'], ['network', 'globe', 'Network'], ['startup', 'bolt', 'Startup'], ['settings', 'gear', 'Settings'], ['activity', 'activity', 'Activity'], ['modpacks', 'package', 'Modpacks'], ['icon', 'sparkle', 'Icon Importer'], ['versions', 'tag', 'Versions'], ['players', 'user', 'Players'], ['plugins', 'puzzle', 'Plugins']];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const copy = (txt) => { navigator.clipboard && navigator.clipboard.writeText(txt); toast('Copied'); };
+const emptyRow = (m) => `<div class="empty">${m}</div>`;
+const rowStyle = 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap';
+
+function head() {
+  const run = sv.status === 'running';
+  document.getElementById('head').innerHTML = `<div class="flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+    <div class="flex" style="gap:14px;align-items:center">
+      ${sv.icon ? `<img src="${sv.icon}" alt="" style="width:52px;height:52px;border-radius:10px;image-rendering:pixelated;border:1px solid var(--border)">` : ''}
+      <div><div class="flex" style="gap:10px;align-items:center;flex-wrap:wrap"><h2>${esc(sv.name)}</h2><span class="free-badge">MINECRAFT</span>
+      <span class="badge ${run ? 'badge-green' : 'badge-red'}"><span class="dot ${run ? 'dot-green' : 'dot-red'}"></span>${sv.expired ? 'Expired' : run ? 'Running' : 'Offline'}</span></div>
+      <div class="muted" style="font-size:12.5px">${sv.address} · ${sv.software} ${sv.version} · Node ${esc(sv.nodeName)}</div></div></div>
+    <div class="flex" style="gap:8px">
+      <button class="btn btn-sm" onclick="run('start')">${ic('play')} Start</button>
+      <button class="btn btn-sm" onclick="run('restart')">${ic('restart')} Restart</button>
+      <button class="btn btn-sm btn-danger" onclick="run('stop')">${ic('stop')} Stop</button></div></div>`;
+  const ram = run ? Math.round(sv.memory * (0.35 + sv.plugins.length * 0.02)) : 0;
+  const bar = (l, v, t, p) => `<div class="card"><div class="muted" style="font-size:12px">${l}</div><b>${v}</b> <span class="muted" style="font-size:12px">/ ${t}</span><div class="res-bar"><i style="width:${p}%"></i></div></div>`;
+  document.getElementById('res').innerHTML = bar('Memory', ram + ' MB', fmt.mb(sv.memory), Math.min(100, ram / sv.memory * 100)) +
+    bar('CPU', (run ? cpu : 0) + '%', sv.cpu + '%', run ? Math.min(100, cpu / sv.cpu * 100) : 0) + bar('Disk', sizeStr(sv.diskUsedBytes || 0), fmt.mb(sv.disk), (sv.diskUsedBytes || 0) / (sv.disk * 1048576) * 100);
+  document.getElementById('tabs').innerHTML = TABS.map(([k, i, l]) => `<button class="${tab === k ? 'active' : ''}" onclick="go('${k}')">${ic(i)} ${l}</button>`).join('');
+  const act = document.querySelector('#tabs button.active'); if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+function go(k) { tab = k; history.replaceState(null, '', `?id=${id}&tab=${k}`); head(); render(); }
+async function run(a) { await send(a); }
+
+async function send(cmd) {
+  const out = document.getElementById('out');
+  try {
+    const r = await API.post(base + '/console', { command: cmd });
+    sv = { ...sv, ...(r.server || {}) }; head();
+    if (cmd.trim() === 'clear') { if (out) out.innerHTML = ''; return r; }
+    if (out) append(r.lines);
+    return r;
+  } catch (e) { toast(e.message, 'err'); }
+}
+function append(lines) {
+  const out = document.getElementById('out'); if (!out) return;
+  out.insertAdjacentHTML('beforeend', lines.map(l => `<div class="${l.c}">${esc(l.t)}</div>`).join(''));
+  out.scrollTop = out.scrollHeight;
+}
+async function call(p) { try { sv = { ...sv, ...(await p).server }; head(); render(); } catch (e) { toast(e.message, 'err'); } }
+const val = (i) => document.getElementById(i).value;
+
+async function render() {
+  const p = document.getElementById('pane');
+  if (tab === 'console') {
+    p.innerHTML = `<div class="chips"><button class="chip" onclick="go('plugins')">${ic('puzzle')} Install plugins</button><button class="chip" onclick="go('modpacks')">${ic('package')} Install modpack</button><button class="chip" onclick="go('versions')">${ic('tag')} Change version</button><button class="chip" onclick="go('backups')">${ic('archive')} Backups</button></div><div class="term"><div class="term-out" id="out"></div><div class="term-in"><span>$</span><input id="cmd" autocomplete="off" spellcheck="false" placeholder="Type a command — try: plugin install EssentialsX · modpack install <name> · help"></div></div>
+      <div class="muted mt-s" style="font-size:12px">Install any catalog plugin right here: <code>plugin search</code> · <code>plugin install &lt;name&gt;</code> · <code>plugin remove &lt;name&gt;</code> · <code>modpack list</code> · <code>modpack install &lt;name&gt;</code></div>`;
+    const r = await API.get(base + '/console'); append(r.log.length ? r.log : [{ t: 'Welcome to Diablo console. Type "help" to see commands.', c: 't-info' }]);
+    const inp = document.getElementById('cmd');
+    inp.onkeydown = async (e) => {
+      if (e.key === 'Enter' && inp.value.trim()) { const c = inp.value; hist.push(c); hi = hist.length; inp.value = ''; await send(c); }
+      else if (e.key === 'ArrowUp') { if (hi > 0) inp.value = hist[--hi] || ''; e.preventDefault(); }
+      else if (e.key === 'ArrowDown') { inp.value = hist[++hi] || ''; }
+    };
+    inp.focus();
+  } else if (tab === 'files') {
+    renderFiles();
+  } else if (tab === 'databases') {
+    p.innerHTML = `<div class="flex mb" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div class="muted">${sv.databases.length} / 2 databases (MySQL)</div>
+      <div class="flex" style="gap:8px"><input id="dbName" placeholder="database name" style="max-width:200px"><button class="btn btn-primary btn-sm" onclick="call(API.post(base+'/databases',{name:val('dbName')}))">Create database</button></div></div>
+      <div class="card">${sv.databases.length ? sv.databases.map(d => `<div style="${rowStyle}"><div><b>${d.name}</b><div class="muted" style="font-size:12px">${d.host}:${d.port} · user <code>${d.username}</code> · pass <code id="pw_${d.id}" data-p="${d.password}">••••••••••</code></div></div>
+        <div class="flex" style="gap:6px"><button class="btn btn-sm" onclick="const e=document.getElementById('pw_${d.id}');e.textContent=e.textContent.includes('•')?e.dataset.p:'••••••••••'">Show</button><button class="btn btn-sm" onclick="copy('${d.password}')">Copy</button><button class="btn btn-sm" onclick="call(API.post(base+'/databases/${d.id}/rotate',{}))">Rotate</button><button class="btn btn-sm btn-danger" onclick="call(API.del(base+'/databases/${d.id}'))">Delete</button></div></div>`).join('') : emptyRow('No databases yet.')}</div>`;
+  } else if (tab === 'schedules') {
+    p.innerHTML = `<div class="card mb"><h3>New schedule</h3><div class="muted mb">Runs a console command automatically. Checked every 30 seconds.</div>
+      <div class="row"><div class="field"><label>Name</label><input id="scName" placeholder="Daily restart"></div><div class="field"><label>Command</label><input id="scCmd" placeholder="restart  ·  say Hello  ·  backup create"></div><div class="field"><label>Every (minutes)</label><input id="scEvery" type="number" value="60"></div></div>
+      <button class="btn btn-primary" onclick="call(API.post(base+'/schedules',{name:val('scName'),command:val('scCmd'),everyMin:val('scEvery')}))">Create schedule</button></div>
+      <div class="card">${sv.schedules.length ? sv.schedules.map(x => `<div style="${rowStyle}"><div><b>${esc(x.name)}</b> <code>${esc(x.command)}</code><div class="muted" style="font-size:12px">Every ${x.everyMin} min · last run ${x.lastRun ? fmt.rel(x.lastRun) : 'never'}</div></div>
+        <div class="flex" style="gap:6px"><button class="btn btn-sm" onclick="send('${esc(x.command).replace(/'/g, "\\'")}')">Run now</button><button class="btn btn-sm" onclick="call(API.put(base+'/schedules/${x.id}',{enabled:${!x.enabled}}))">${x.enabled ? 'Pause' : 'Resume'}</button><button class="btn btn-sm btn-danger" onclick="call(API.del(base+'/schedules/${x.id}'))">Delete</button></div></div>`).join('') : emptyRow('No schedules yet.')}</div>`;
+  } else if (tab === 'users') {
+    p.innerHTML = `${sv.isOwner ? `<div class="flex mb" style="gap:8px;flex-wrap:wrap"><input id="suName" placeholder="Panel username or email" style="max-width:280px"><button class="btn btn-primary btn-sm" onclick="call(API.post(base+'/subusers',{username:val('suName')}))">Add user</button></div>` : ''}
+      <div class="card"><div style="${rowStyle}"><div><b>${esc(sv.ownerName || 'Owner')}</b></div><span class="badge badge-green">Owner</span></div>
+      ${sv.subusers.map(u => `<div style="${rowStyle}"><div><b>${esc(u.username)}</b><div class="muted" style="font-size:12px">Added ${fmt.rel(u.addedAt)} · full console access</div></div>${sv.isOwner ? `<button class="btn btn-sm btn-danger" onclick="call(API.del(base+'/subusers/${u.userId}'))">Remove</button>` : ''}</div>`).join('') || ''}</div>`;
+  } else if (tab === 'backups') {
+    p.innerHTML = `<div class="flex mb" style="justify-content:space-between"><div class="muted">${sv.backups.length} / 5 backups</div><button class="btn btn-primary btn-sm" onclick="bk()">Create backup</button></div>
+      <div class="card">${sv.backups.length ? sv.backups.map(b => `<div class="flex" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span>${ic('archive')} ${b.name} <span class="muted">· ${b.size} MB · ${fmt.rel(b.createdAt)}</span></span><button class="btn btn-sm btn-danger" onclick="bkDel('${b.id}')">Delete</button></div>`).join('') : emptyRow('No backups yet.')}</div>`;
+  } else if (tab === 'network') {
+    p.innerHTML = `<div class="card"><h3>Primary allocation</h3><div class="muted mb">Players connect with this address.</div>
+      <div class="grid grid-3"><div><div class="muted" style="font-size:12px">IP address</div><b>${sv.allocation ? (sv.allocation.alias || sv.allocation.ip) : '—'}</b></div><div><div class="muted" style="font-size:12px">Port</div><b>${sv.allocation ? sv.allocation.port : '—'}</b></div><div><div class="muted" style="font-size:12px">Node</div><b>${esc(sv.nodeName)}</b></div></div>
+      <div class="flex mt" style="gap:8px;align-items:center"><code>${sv.address}</code><button class="btn btn-sm" onclick="copy('${sv.address}')">Copy address</button></div></div>`;
+  } else if (tab === 'startup') {
+    if (!sws) sws = (await API.get('/api/client/software')).software;
+    const heap = Math.max(512, sv.memory - 256);
+    p.innerHTML = `<div class="card"><label>Server software</label><select class="input" id="sw">${sws.map(x => `<option ${x === sv.software ? 'selected' : ''}>${x}</option>`).join('')}</select>
+      <label class="mt">Startup command</label><div class="term" style="padding:12px;font-size:12.5px;color:#d9d3d5">java -Xms128M -Xmx${heap}M -jar ${sv.software.toLowerCase()}-${sv.version}.jar nogui</div>
+      <div class="muted mt-s" style="font-size:12px">Memory heap is calculated from your plan (${fmt.mb(sv.memory)}). Change the Minecraft version in the Versions tab.</div>
+      <button class="btn btn-primary mt" onclick="call(API.put(base,{software:val('sw')}).then(()=>API.get(base)))">Save software</button></div>`;
+  } else if (tab === 'settings') {
+    p.innerHTML = `<div class="card"><label>Server name</label><input class="input" id="nm" value="${esc(sv.name)}"><button class="btn btn-primary mt" onclick="call(API.put(base,{name:val('nm')}))">Save name</button></div>
+      ${sv.isOwner ? `<div class="card mt"><h3>Danger zone</h3><div class="muted mb">Deleting a server frees its port permanently.</div><button class="btn btn-danger" onclick="del()">Delete server</button></div>` : ''}`;
+  } else if (tab === 'activity') {
+    const r = await API.get(base + '/activity');
+    p.innerHTML = `<div class="card">${r.activity.length ? r.activity.map(a => `<div style="${rowStyle}"><span><b>${esc(a.who)}</b> ${esc(a.text)}</span><span class="muted" style="font-size:12px">${fmt.rel(a.at)}</span></div>`).join('') : emptyRow('No activity yet.')}</div>`;
+  } else if (tab === 'modpacks') {
+    if (!modpacks.length) modpacks = (await API.get('/api/client/modpacks')).modpacks;
+    const cur = sv.modpack ? sv.modpack.id : null;
+    p.innerHTML = `<div class="alert alert-info mb">Same as typing <code>modpack install &lt;name&gt;</code> in the console. Installing a modpack sets the Minecraft version automatically.</div>
+      <div class="grid grid-3">${modpacks.map(m => `<div class="card"><div class="flex" style="justify-content:space-between"><b>${m.name}</b><span class="badge badge-grey">${m.loader}</span></div>
+        <div class="muted" style="font-size:12.5px;min-height:38px">${m.description || ''}</div><div class="muted" style="font-size:12px">Minecraft ${m.mcVersion}</div>
+        ${cur === m.id ? `<button class="btn btn-sm btn-danger btn-block mt-s" onclick="mp('remove','${m.name}')">Remove</button>` : `<button class="btn btn-sm btn-primary btn-block mt-s" onclick="mp('install','${m.name}')">Install</button>`}</div>`).join('')}</div>`;
+  } else if (tab === 'icon') {
+    p.innerHTML = `<div class="card"><h3>Server icon</h3><div class="muted mb">Upload an image — it is resized to 64×64 and shown next to your server name (and in the Minecraft server list when supported by the node).</div>
+      <div class="flex" style="gap:16px;align-items:center;flex-wrap:wrap">${sv.icon ? `<img src="${sv.icon}" alt="" style="width:64px;height:64px;border-radius:10px;image-rendering:pixelated;border:1px solid var(--border)">` : '<div class="muted">No icon set</div>'}
+      <input type="file" id="iconFile" accept="image/png,image/jpeg,image/webp" style="max-width:260px">${sv.icon ? `<button class="btn btn-sm btn-danger" onclick="call(API.put(base,{icon:null}).then(()=>API.get(base)))">Remove</button>` : ''}</div></div>`;
+    document.getElementById('iconFile').onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const img = new Image(), url = URL.createObjectURL(f);
+      img.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').drawImage(img, 0, 0, 64, 64); call(API.put(base, { icon: c.toDataURL('image/png') }).then(() => API.get(base))); };
+      img.src = url;
+    };
+  } else if (tab === 'versions') {
+    if (!versions.length) { const r = await API.get('/api/client/versions'); versions = r.versions; vmin = r.min; }
+    const cmpV = (x, y) => { const a = x.split('.').map(Number), b = y.split('.').map(Number); for (let i = 0; i < 3; i++) { const d = (a[i] || 0) - (b[i] || 0); if (d) return d; } return 0; };
+    const ok = (v) => cmpV(v, vmin[sv.software] || '1.7.10') >= 0;
+    p.innerHTML = `<div class="card"><div class="flex" style="justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div><h3>Minecraft version</h3><div class="muted">Currently <b style="color:#fff">${sv.software} ${sv.version}</b> · ${versions.length} versions available (${sv.software} supports ${vmin[sv.software] || '1.7.10'}+)</div></div><input id="vq" placeholder="Search e.g. 1.20" style="max-width:200px"></div><div id="vgroups" class="mt"></div></div>`;
+    const draw = () => { const q = val('vq').trim(); const g = {};
+      versions.filter(v => v.version.startsWith(q)).forEach(v => { const m = v.version.split('.').slice(0, 2).join('.'); (g[m] = g[m] || []).push(v.version); });
+      document.getElementById('vgroups').innerHTML = Object.keys(g).map(m => `<div style="margin-bottom:14px"><div class="muted" style="font-size:12px;margin-bottom:6px">${m}.x</div><div class="flex" style="gap:6px;flex-wrap:wrap">${g[m].map(v => `<button class="chip" ${ok(v) ? '' : 'disabled title="Not supported by ' + sv.software + '" style="opacity:.35;cursor:not-allowed"'} ${v === sv.version ? 'style="border-color:var(--accent);color:#fff;background:rgba(255,59,59,.18)"' : ''} onclick="setVer('${v}')">${v}</button>`).join('')}</div></div>`).join('') || '<div class="empty">No version matches.</div>'; };
+    document.getElementById('vq').oninput = draw; draw();
+  } else if (tab === 'players') {
+    const P = sv.players || { whitelist: [], ops: [], banned: [] };
+    const col = (k, title) => `<div class="card"><h3>${title}</h3><div class="flex mb" style="gap:6px"><input id="pl_${k}" placeholder="Player name"><button class="btn btn-sm btn-primary" onclick="call(API.post(base+'/players',{list:'${k}',name:val('pl_${k}')}))">Add</button></div>
+      ${P[k].length ? P[k].map(n => `<div style="${rowStyle}"><span>${esc(n)}</span><button class="btn btn-sm btn-danger" onclick="call(API.post(base+'/players',{list:'${k}',name:'${esc(n)}',remove:true}))">Remove</button></div>`).join('') : emptyRow('Empty')}</div>`;
+    p.innerHTML = `<div class="muted mb">Players online: <b>${sv.status === 'running' ? 0 : '—'}</b> (live player list needs the Wings agent)</div><div class="grid grid-3">${col('whitelist', 'Whitelist')}${col('ops', 'Operators')}${col('banned', 'Banned')}</div>`;
+  } else if (tab === 'plugins') {
+    if (!plugins.length) plugins = (await API.get('/api/client/plugins')).plugins;
+    const have = new Set(sv.plugins.map(x => x.id));
+    const can = ['Paper', 'Purpur', 'Spigot'].includes(sv.software);
+    p.innerHTML = `${can ? '' : `<div class="alert alert-warn mb">Plugins only work on Paper, Purpur or Spigot. This server runs <b>${sv.software}</b> — change it in the Startup tab.</div>`}<input class="input" id="q" placeholder="Search plugins…" style="margin-bottom:14px"><div class="grid grid-3" id="plist"></div>`;
+    const draw = () => { const q = document.getElementById('q').value.toLowerCase();
+      document.getElementById('plist').innerHTML = plugins.filter(x => (x.name + x.category).toLowerCase().includes(q)).map(x => `<div class="card"><div class="flex" style="justify-content:space-between"><b>${x.name}</b><span class="muted" style="font-size:12px">${x.version}</span></div>
+        <div class="muted" style="font-size:12.5px;min-height:38px">${x.description}</div>
+        ${have.has(x.id) ? `${(sv.plugins.find(z => z.id === x.id) || {}).source === 'placeholder' ? '<div class="muted" style="font-size:11px;color:#ffc15e">placeholder file (offline)</div>' : ''}<button class="btn btn-sm btn-danger btn-block mt-s" onclick="pl('remove','${x.name}')">Remove</button>` : `<button class="btn btn-sm btn-primary btn-block mt-s" ${can ? '' : 'disabled'} onclick="pl('install','${x.name}')">Install</button>`}</div>`).join(''); };
+    document.getElementById('q').oninput = draw; draw();
+  }
+}
+
+async function setVer(v) { try { const r = await API.post(base + '/version', { version: v }); sv = { ...sv, ...r.server }; head(); toast('Version set to ' + v); render(); } catch (e) { toast(e.message, 'err'); } }
+const sizeStr = (b) => b == null ? '—' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? (b / 1024).toFixed(1) + ' KB' : b + ' B';
+async function renderFiles() {
+  const p = document.getElementById('pane');
+  try { sv = { ...sv, ...(await API.get(base)).server }; head(); } catch (_) {}
+  let r; try { r = await API.get(base + '/files?dir=' + encodeURIComponent(fdir)); } catch (e) { fdir = ''; toast(e.message, 'err'); return; }
+  const parts = fdir.split('/').filter(Boolean);
+  const crumbs = [`<a href="#" onclick="openDir('');return false">/ root</a>`].concat(parts.map((x, i) => `<a href="#" onclick="openDir('${parts.slice(0, i + 1).join('/')}');return false">${esc(x)}</a>`)).join(' <span class="muted">/</span> ');
+  const pct = Math.min(100, r.usedBytes / r.limitBytes * 100);
+  p.innerHTML = `<div class="flex mb" style="justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div>${crumbs}</div>
+      <div class="flex" style="gap:8px"><button class="btn btn-sm" onclick="newFolder()">${ic('folder')} New folder</button><label class="btn btn-sm btn-primary" style="cursor:pointer">${ic('download')} Upload files<input type="file" id="upl" multiple hidden></label></div></div>
+    <div class="card mb" style="padding:12px 16px"><div class="flex" style="justify-content:space-between;font-size:12.5px"><span>Disk usage</span><span class="muted">${sizeStr(r.usedBytes)} / ${sizeStr(r.limitBytes)}</span></div><div class="res-bar"><i style="width:${pct}%"></i></div></div>
+    <div class="dropzone" id="drop">Drop files here to upload — <b>max 300 MB per file</b><div id="ups"></div></div>
+    <div class="card mt"><table class="table"><thead><tr><th>Name</th><th>Size</th><th>Modified</th><th></th></tr></thead><tbody>
+    ${r.items.length ? r.items.map(f => { const rel = (fdir ? fdir + '/' : '') + f.name; return `<tr><td>${f.type === 'dir' ? `<a href="#" onclick="openDir('${esc(rel)}');return false">${ic('folder')} ${esc(f.name)}</a>` : `${ic('file')} ${esc(f.name)}`}</td><td>${sizeStr(f.size)}</td><td class="muted">${fmt.rel(f.modified)}</td>
+      <td style="text-align:right;white-space:nowrap">${f.type === 'file' ? `<a class="btn btn-sm" href="${base}/files/download?path=${encodeURIComponent(rel)}">Download</a> ` : ''}<button class="btn btn-sm" onclick="renameF('${esc(rel)}','${esc(f.name)}')">Rename</button> <button class="btn btn-sm btn-danger" onclick="delF('${esc(rel)}')">Delete</button></td></tr>`; }).join('') : `<tr><td colspan="4" class="center muted">This folder is empty.</td></tr>`}</tbody></table></div>`;
+  document.getElementById('upl').onchange = (e) => uploadAll([...e.target.files]);
+  const dz = document.getElementById('drop');
+  ['dragover', 'dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('over'); }));
+  dz.addEventListener('drop', e => uploadAll([...e.dataTransfer.files]));
+}
+function openDir(d) { fdir = d; renderFiles(); }
+async function newFolder() { const n = prompt('Folder name'); if (!n) return; try { await API.post(base + '/files/folder', { dir: fdir, name: n }); renderFiles(); } catch (e) { toast(e.message, 'err'); } }
+async function renameF(rel, old) { const n = prompt('New name', old); if (!n || n === old) return; try { await API.post(base + '/files/rename', { path: rel, to: n }); renderFiles(); } catch (e) { toast(e.message, 'err'); } }
+async function delF(rel) { if (!confirm('Delete ' + rel + '?')) return; try { await API.del(base + '/files?path=' + encodeURIComponent(rel)); renderFiles(); } catch (e) { toast(e.message, 'err'); } }
+const MAX_UP = 300 * 1024 * 1024;
+async function uploadAll(files) { for (const f of files) await uploadOne(f); renderFiles(); }
+function uploadOne(file) {
+  return new Promise((resolve) => {
+    const box = document.getElementById('ups'); const row = document.createElement('div'); row.className = 'up-row';
+    row.innerHTML = `<span>${esc(file.name)} <span class="muted">(${sizeStr(file.size)})</span></span><span class="st muted">waiting…</span><div class="res-bar"><i style="width:0%"></i></div>`; box.appendChild(row);
+    const st = row.querySelector('.st'), bar = row.querySelector('i');
+    if (file.size > MAX_UP) { st.textContent = 'Too large — max 300 MB'; st.style.color = '#ff7a85'; toast(file.name + ' is larger than 300 MB', 'err'); return resolve(); }
+    const x = new XMLHttpRequest();
+    x.open('POST', `${base}/files/upload?dir=${encodeURIComponent(fdir)}&name=${encodeURIComponent(file.name)}`);
+    x.setRequestHeader('Content-Type', 'application/octet-stream');
+    x.upload.onprogress = (e) => { if (e.lengthComputable) { const p = e.loaded / e.total * 100; bar.style.width = p + '%'; st.textContent = p.toFixed(0) + '% · ' + sizeStr(e.loaded) + ' / ' + sizeStr(e.total); } };
+    x.onload = () => { let m = ''; try { m = JSON.parse(x.responseText).error; } catch (_) {} if (x.status === 200) { bar.style.width = '100%'; st.textContent = 'Uploaded'; st.style.color = '#5fe39a'; toast('Uploaded ' + file.name); } else { st.textContent = m || 'Failed'; st.style.color = '#ff7a85'; toast(m || 'Upload failed', 'err'); } resolve(); };
+    x.onerror = () => { st.textContent = 'Upload failed (connection)'; st.style.color = '#ff7a85'; resolve(); };
+    x.send(file);
+  });
+}
+async function pl(a, n) { const r = await send(`plugin ${a} ${n}`); toast(r && r.lines.some(l => l.c === 't-err') ? 'Failed' : 'Done'); render(); }
+async function mp(a, n) { const r = await send(`modpack ${a} ${n}`); toast(r && r.lines.some(l => l.c === 't-err') ? 'Failed' : 'Done'); render(); }
+async function bk() { try { sv = (await API.post(base + '/backups', {})).server; head(); render(); } catch (e) { toast(e.message, 'err'); } }
+async function bkDel(b) { sv = (await API.del(base + '/backups/' + b)).server; render(); }
+async function saveStartup() { await API.put(base, { software: document.getElementById('sw').value }); const v = document.getElementById('ver').value; await API.post(base + '/version', { version: v }); sv = (await API.get(base)).server; head(); toast('Saved'); }
+async function rename() { sv = (await API.put(base, { name: document.getElementById('nm').value })).server; head(); toast('Saved'); }
+async function del() { if (!confirm('Delete this server?')) return; await API.del(base); location.href = '/servers.html'; }
+
+(async () => {
+  if (!(await guard({ active: 'servers', title: 'Server', subtitle: 'Console & management' }))) return;
+  try { sv = (await API.get(base)).server; } catch (e) { location.href = '/servers.html'; return; }
+  setInterval(() => { cpu = Math.round(3 + Math.random() * 12); if (tab === 'console') head(); }, 4000);
+  head(); render();
+})();
+</script></body></html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catalog · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css"><link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml"></head>
+<body class="bg-panel"><div class="app"><aside class="sidebar" id="sidebar"></aside><div class="main"><header class="topbar" id="topbar"></header>
+<div class="content">
+  <div class="grid grid-3 mb">
+    <div class="card"><h3>Add version</h3><div class="muted mb">e.g. 1.21.9</div><div class="flex" style="gap:8px"><input id="vNew" placeholder="1.21.9"><button class="btn btn-primary" onclick="add('versions',{version:val('vNew')})">Add</button></div></div>
+    <div class="card"><h3>Add plugin</h3><div class="field"><input id="pName" placeholder="Name"></div><div class="row"><div class="field"><input id="pVer" placeholder="Version"></div><div class="field"><input id="pCat" placeholder="Category"></div></div><div class="field"><input id="pSlug" placeholder="Modrinth slug (optional)"></div><div class="field"><input id="pDesc" placeholder="Description"></div><button class="btn btn-primary" onclick="add('plugins',{name:val('pName'),version:val('pVer'),category:val('pCat'),slug:val('pSlug'),description:val('pDesc')})">Add plugin</button></div>
+    <div class="card"><h3>Add modpack</h3><div class="field"><input id="mName" placeholder="Name"></div><div class="row"><div class="field"><select id="mLoader"><option>Forge</option><option>Fabric</option><option>Vanilla</option></select></div><div class="field"><input id="mVer" placeholder="MC version"></div></div><div class="field"><input id="mDesc" placeholder="Description"></div><button class="btn btn-primary" onclick="add('modpacks',{name:val('mName'),loader:val('mLoader'),mcVersion:val('mVer'),description:val('mDesc')})">Add modpack</button></div>
+  </div>
+  <div class="grid grid-3"><div class="card"><h3 id="hv"></h3><div id="lv" style="max-height:420px;overflow:auto"></div></div><div class="card"><h3 id="hp"></h3><div id="lp" style="max-height:420px;overflow:auto"></div></div><div class="card"><h3 id="hm"></h3><div id="lm" style="max-height:420px;overflow:auto"></div></div></div>
+</div></div></div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, guard, toast } = window.Nova; const val = i => document.getElementById(i).value;
+const row = (txt, sub, kind, id) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div><b>${txt}</b><div class="muted" style="font-size:12px">${sub}</div></div><button class="btn btn-sm btn-danger" onclick="del('${kind}','${id}')">Delete</button></div>`;
+async function load() { const c = await API.get('/api/admin/catalog');
+  const cv = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) { const d = (y[i] || 0) - (x[i] || 0); if (d) return d; } return 0; };
+  hv.textContent = `Versions (${c.versions.length})`; hp.textContent = `Plugins (${c.plugins.length})`; hm.textContent = `Modpacks (${c.modpacks.length})`;
+  lv.innerHTML = c.versions.sort((a, b) => cv(a.version, b.version)).map(v => row(v.version, v.type, 'versions', v.id)).join('');
+  lp.innerHTML = c.plugins.map(p => row(p.name, `${p.category} · ${p.version}`, 'plugins', p.id)).join('');
+  lm.innerHTML = c.modpacks.map(m => row(m.name, `${m.loader} · MC ${m.mcVersion}`, 'modpacks', m.id)).join(''); }
+async function add(k, b) { try { await API.post('/api/admin/catalog/' + k, b); toast('Added'); load(); } catch (e) { toast(e.message, 'err'); } }
+async function del(k, id) { if (!confirm('Delete?')) return; await API.del(`/api/admin/catalog/${k}/${id}`); load(); }
+(async () => { if (!(await guard({ active: 'admin-catalog', requireAdmin: true, title: 'Catalog', subtitle: 'Versions, plugins and modpacks' }))) return; load(); })();
+</script></body></html>

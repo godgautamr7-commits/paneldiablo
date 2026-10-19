@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coin Manager · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="grid grid-2 mb">
+        <div class="card">
+          <h3>Adjust a user's coins</h3>
+          <div class="muted mb">Add or remove coins from a specific account.</div>
+          <div class="field"><label>User</label><select id="adjUser"></select></div>
+          <div class="row">
+            <div class="field"><label>Amount (use negative to remove)</label><input id="adjAmount" type="number" placeholder="e.g. 500 or -250"></div>
+            <div class="field"><label>Note</label><input id="adjNote" placeholder="Reason"></div>
+          </div>
+          <button class="btn btn-primary" id="adjBtn">Apply adjustment</button>
+        </div>
+        <div class="card">
+          <h3>Give coins to everyone</h3>
+          <div class="muted mb">Credit or debit every user at once.</div>
+          <div class="field"><label>Amount</label><input id="allAmount" type="number" placeholder="e.g. 100"></div>
+          <button class="btn btn-primary" id="allBtn">Give to all users</button>
+          <div class="section-head mt"><h3>Total in circulation</h3></div>
+          <div class="stat"><div class="ico"><img class="ico-img" src="/assets/img/icons/coin.svg" alt=""></div><div><div class="val" id="circ">0</div><div class="lbl">coins</div></div></div>
+        </div>
+      </div>
+      <div class="section-head"><h2>Recent Transactions</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>User</th><th>Type</th><th>Amount</th><th>Note</th><th>Balance after</th></tr></thead>
+        <tbody id="txBody"><tr><td colspan="6" class="center muted">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast } = window.Nova;
+let users = [];
+(async () => {
+  const user = await guard({ active: 'admin-coins', requireAdmin: true, title: 'Coin Manager', subtitle: 'Grant, remove and track the coin economy' });
+  if (!user) return;
+  users = (await API.get('/api/admin/users')).users;
+  document.getElementById('adjUser').innerHTML = users.map(u => `<option value="${u.id}">${u.username} (${fmt.coins(u.coins)} coins)</option>`).join('');
+  const stats = await API.get('/api/admin/stats');
+  document.getElementById('circ').textContent = fmt.coins(stats.coinsInCirculation);
+  await loadTx();
+  document.getElementById('adjBtn').onclick = async () => {
+    const amount = Number(document.getElementById('adjAmount').value);
+    if (!amount) return toast('Enter an amount', 'err');
+    try { await API.post('/api/admin/coins/adjust', { userId: document.getElementById('adjUser').value, amount, note: document.getElementById('adjNote').value }); toast('Coins adjusted'); document.getElementById('adjAmount').value=''; await reload(); } catch (e) { toast(e.message, 'err'); }
+  };
+  document.getElementById('allBtn').onclick = async () => {
+    const amount = Number(document.getElementById('allAmount').value);
+    if (!amount) return toast('Enter an amount', 'err');
+    try { const r = await API.post('/api/admin/coins/give-all', { amount }); toast('Applied to ' + r.users + ' users'); document.getElementById('allAmount').value=''; await reload(); } catch (e) { toast(e.message, 'err'); }
+  };
+})();
+async function loadTx() {
+  const { transactions } = await API.get('/api/admin/transactions');
+  const tbody = document.getElementById('txBody');
+  tbody.innerHTML = transactions.length ? transactions.map(t => `<tr>
+    <td class="muted">${fmt.dateTime(t.createdAt)}</td>
+    <td><b>${t.username}</b></td>
+    <td><span class="badge ${t.amount > 0 ? 'badge-green' : 'badge-red'}">${t.type}</span></td>
+    <td style="font-weight:700;color:${t.amount>0?'#5fe39a':'var(--danger)'}">${t.amount>0?'+':''}${t.amount}</td>
+    <td>${t.note||'—'}</td>
+    <td>${fmt.coins(t.balanceAfter)}</td>
+  </tr>`).join('') : '<tr><td colspan="6" class="center muted">No transactions yet.</td></tr>';
+}
+async function reload() {
+  users = (await API.get('/api/admin/users')).users;
+  const keep = document.getElementById('adjUser').value;
+  document.getElementById('adjUser').innerHTML = users.map(u => `<option value="${u.id}">${u.username} (${fmt.coins(u.coins)} coins)</option>`).join('');
+  if (keep) document.getElementById('adjUser').value = keep;
+  const stats = await API.get('/api/admin/stats'); document.getElementById('circ').textContent = fmt.coins(stats.coinsInCirculation);
+  await loadTx();
+}
+</script>
+</body>
+</html>

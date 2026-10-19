@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Node · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<style>
+  .crumbs { color: var(--text-mute); font-size: 13px; margin: -6px 0 14px; }
+  .crumbs a { color: var(--accent-2); }
+  .split { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+  .codebox { background: #070405; border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; color: #d9d3d5; }
+  .cmd { display: flex; gap: 8px; align-items: stretch; margin-top: 10px; }
+  .cmd .codebox { flex: 1; }
+  .glance { display: grid; gap: 12px; }
+  .glance .g { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: var(--surface-2); }
+  .glance .g b { font-size: 20px; display: block; }
+  .glance .g span { color: var(--text-mute); font-size: 12.5px; }
+  .alias { background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: inherit; width: 100%; min-width: 140px; }
+  .tab-pane { display: none; } .tab-pane.active { display: block; }
+  .danger-card { border-color: rgba(255,92,114,.4); }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--text-dim); margin: 6px 0 14px; }
+  .check input { width: auto; }
+</style>
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="section-head">
+        <h2 id="nodeTitle">Node</h2>
+        <span id="nodeBadge"></span>
+        <div class="spacer"></div>
+      </div>
+      <div class="crumbs"><a href="/admin/index.html">Admin</a> &rsaquo; <a href="/admin/nodes.html">Nodes</a> &rsaquo; <span id="crumbName"></span></div>
+
+      <div class="tabs" id="tabs">
+        <button data-tab="about" class="active">About</button>
+        <button data-tab="settings">Settings</button>
+        <button data-tab="configuration">Configuration</button>
+        <button data-tab="allocation">Allocation</button>
+        <button data-tab="servers">Servers</button>
+      </div>
+
+      <!-- ABOUT -->
+      <div class="tab-pane active" id="tab-about">
+        <div class="split">
+          <div>
+            <div class="card">
+              <h3>Information</h3>
+              <div class="kv"><span class="k">Daemon version</span><span class="v" id="iVersion">—</span></div>
+              <div class="kv"><span class="k">System information</span><span class="v" id="iSystem">—</span></div>
+              <div class="kv"><span class="k">Total CPU threads</span><span class="v" id="iCpu">—</span></div>
+              <div class="kv"><span class="k">Heartbeat</span><span class="v" id="iBeat">—</span></div>
+              <div class="kv"><span class="k">Location</span><span class="v" id="iLoc">—</span></div>
+              <div class="kv"><span class="k">Description</span><span class="v" id="iDesc" style="font-weight:500;text-align:right;"></span></div>
+            </div>
+            <div class="card danger-card" style="margin-top:18px;">
+              <h3>Delete node</h3>
+              <p class="muted" style="margin:6px 0 14px;">Deleting a node is irreversible and removes it from the panel immediately. There must be no servers on this node.</p>
+              <button class="btn btn-danger" id="delNodeBtn">Yes, delete this node</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>At-a-glance</h3>
+            <div class="glance" style="margin-top:12px;">
+              <div class="g"><b id="gDisk">—</b><span>Disk space allocated</span></div>
+              <div class="g"><b id="gMem">—</b><span>Memory allocated</span></div>
+              <div class="g"><b id="gSrv">—</b><span>Total servers</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="tab-pane" id="tab-settings">
+        <div class="split">
+          <div class="card">
+            <h3>Settings</h3>
+            <div class="field"><label>Node name</label><input id="sName"></div>
+            <div class="field"><label>Description</label><textarea id="sDesc"></textarea></div>
+            <div class="field"><label>Location</label><input id="sLoc"></div>
+            <div class="row">
+              <div class="field"><label>Fully qualified domain name</label><input id="sFqdn" placeholder="node1.example.com"></div>
+              <div class="field"><label>IP address (what players connect to)</label><input id="sIp" placeholder="203.0.113.10"></div>
+            </div>
+            <div class="row">
+              <div class="field"><label>Daemon port</label><input id="sPort" type="number"></div>
+              <div class="field"><label>Scheme</label><select id="sScheme"><option>https</option><option>http</option></select></div>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <h3>Allocation limits</h3>
+              <div class="field" style="margin-top:12px;"><label>Total memory (MB)</label><input id="sMem" type="number"></div>
+              <div class="field"><label>Disk space (MB)</label><input id="sDisk" type="number"></div>
+            </div>
+            <div class="card" style="margin-top:18px;">
+              <h3>Save settings</h3>
+              <label class="check" style="margin-top:12px;"><input type="checkbox" id="sReset"> Reset Wings token (the node must be re-configured afterwards)</label>
+              <button class="btn btn-primary" id="saveSettings">Save changes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONFIGURATION -->
+      <div class="tab-pane" id="tab-configuration">
+        <div class="split">
+          <div class="card">
+            <h3>Configuration file</h3>
+            <p class="muted" style="margin:6px 0 12px;">Saved as <code>config.json</code> in the Wings directory on the node (<code>/opt/diablo-wings</code>).</p>
+            <div class="codebox" id="cfgFile"></div>
+            <p class="muted" style="margin-top:12px;">Use the Auto-Deploy command instead of copying this file by hand.</p>
+          </div>
+          <div class="card">
+            <h3>Auto-Deploy</h3>
+            <p class="muted" style="margin:6px 0 12px;">Run <code>node-setup.sh</code> on the node machine first. Then click the button below and run the command there to connect it to this panel.</p>
+            <button class="btn btn-block" id="genBtn">Generate Token</button>
+            <div id="cmdWrap" class="hidden">
+              <div class="cmd"><div class="codebox" id="cmdText"></div></div>
+              <button class="btn btn-sm" id="copyCmd" style="margin-top:10px;">Copy command</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ALLOCATION -->
+      <div class="tab-pane" id="tab-allocation">
+        <div class="split">
+          <div class="card">
+            <div class="flex" style="justify-content:space-between;margin-bottom:12px;">
+              <h3>Existing allocations</h3>
+              <button class="btn btn-sm btn-danger" id="delSel">Delete selected</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th style="width:34px;"><input type="checkbox" id="selAll" style="width:auto;"></th><th>IP address</th><th>IP alias</th><th>Port</th><th>Assigned to</th></tr></thead>
+                <tbody id="allocBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Assign new allocations</h3>
+            <div class="field" style="margin-top:12px;"><label>IP address</label><input id="aIp" placeholder="203.0.113.10"><div class="hint">The IP players use to reach this node.</div></div>
+            <div class="field"><label>IP alias</label><input id="aAlias" placeholder="play.example.com"><div class="hint">Optional name shown to players instead of the IP.</div></div>
+            <div class="field"><label>Ports</label><input id="aPorts" placeholder="25565, 25570-25580"><div class="hint">Single ports or ranges separated by commas or spaces.</div></div>
+            <button class="btn btn-primary" id="assignBtn">Submit</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SERVERS -->
+      <div class="tab-pane" id="tab-servers">
+        <div class="card">
+          <h3>Server list</h3>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead><tr><th>ID</th><th>Server name</th><th>Owner</th><th>Service</th><th>Status</th></tr></thead>
+              <tbody id="srvBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, guard, toast } = window.Nova;
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nodeId = new URLSearchParams(location.search).get('id');
+let node = null, servers = [];
+
+(async () => {
+  const user = await guard({ active: 'admin-nodes', requireAdmin: true, title: 'Nodes', subtitle: 'Node details' });
+  if (!user) return;
+  if (!nodeId) return location.replace('/admin/nodes.html');
+  await load();
+  document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+  showTab((location.hash || '#about').slice(1));
+  $('saveSettings').onclick = saveSettings;
+  $('genBtn').onclick = genCommand;
+  $('copyCmd').onclick = copyCommand;
+  $('assignBtn').onclick = assign;
+  $('delSel').onclick = deleteSelected;
+  $('selAll').onchange = (e) => document.querySelectorAll('.allocSel').forEach(c => c.checked = e.target.checked);
+  $('delNodeBtn').onclick = delNode;
+})();
+
+function showTab(t) {
+  if (!document.getElementById('tab-' + t)) t = 'about';
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + t));
+  history.replaceState(null, '', '#' + t);
+}
+
+async function load() {
+  try {
+    const r = await API.get('/api/admin/nodes/' + encodeURIComponent(nodeId));
+    node = r.node; servers = r.servers;
+  } catch (e) { toast(e.message, 'err'); return setTimeout(() => location.replace('/admin/nodes.html'), 1200); }
+  render();
+}
+
+function mb(n) { return window.Nova.fmt.mb(n || 0); }
+
+function render() {
+  document.title = node.name + ' · Diablo Panel';
+  $('nodeTitle').textContent = node.name;
+  $('crumbName').textContent = node.name;
+  const cls = node.status === 'online' ? ['badge-green', 'dot-green'] : node.status === 'pending' ? ['badge-amber', 'dot-amber'] : ['badge-red', 'dot-red'];
+  $('nodeBadge').innerHTML = `<span class="badge ${cls[0]}"><span class="dot ${cls[1]}"></span>${esc(node.status)}</span>`;
+
+  // About
+  const sys = node.system || {};
+  $('iVersion').textContent = node.daemonVersion || (node.status === 'pending' ? 'Not connected yet' : '—');
+  $('iSystem').textContent = sys.platform ? `${sys.platform} ${sys.arch || ''} · ${sys.hostname || ''}` : '—';
+  $('iCpu').textContent = sys.cpus || '—';
+  $('iBeat').textContent = node.lastHeartbeat ? window.Nova.fmt.rel(node.lastHeartbeat) : 'never';
+  $('iLoc').textContent = node.location || '—';
+  $('iDesc').textContent = node.description || '—';
+  $('gDisk').textContent = `${mb(node.diskAllocated)} / ${mb(node.disk)}`;
+  $('gMem').textContent = `${mb(node.memoryAllocated)} / ${mb(node.memory)}`;
+  $('gSrv').textContent = servers.length;
+
+  // Settings (don't clobber what the admin is typing on re-render)
+  if (!render.done) {
+    $('sName').value = node.name; $('sDesc').value = node.description || ''; $('sLoc').value = node.location || '';
+    $('sFqdn').value = node.fqdn || ''; $('sIp').value = node.ip || ''; $('sPort').value = node.daemonPort;
+    $('sScheme').value = node.scheme; $('sMem').value = node.memory; $('sDisk').value = node.disk;
+    render.done = true;
+  }
+
+  // Configuration
+  $('cfgFile').textContent = JSON.stringify({ panelUrl: location.origin, nodeId: node.id, token: node.token, heartbeatInterval: 15 }, null, 2);
+  if (!$('cmdWrap').classList.contains('hidden')) $('cmdText').textContent = command();
+
+  // Allocation
+  $('allocBody').innerHTML = node.allocations.length ? node.allocations.map(a => {
+    const sv = a.assignedTo && servers.find(s => s.id === a.assignedTo);
+    return `<tr>
+      <td>${a.assignedTo ? '' : `<input type="checkbox" class="allocSel" value="${esc(a.id)}" style="width:auto;">`}</td>
+      <td><code>${esc(a.ip)}</code></td>
+      <td><input class="alias" data-id="${esc(a.id)}" value="${esc(a.alias || '')}" placeholder="alias"></td>
+      <td>${a.port}</td>
+      <td>${a.assignedTo ? esc(sv ? sv.name : a.assignedTo) : '<span class="muted">—</span>'}</td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="muted" style="text-align:center;padding:22px;">No allocations yet. Add an IP and ports on the right.</td></tr>';
+  document.querySelectorAll('.alias').forEach(i => i.onchange = () => setAlias(i));
+
+  // Servers
+  $('srvBody').innerHTML = servers.length ? servers.map(s => `<tr>
+    <td><code>${esc(s.id.slice(-8))}</code></td><td>${esc(s.name)}</td><td>${esc(s.owner)}</td>
+    <td>${esc(s.software)} ${esc(s.version)}</td>
+    <td><span class="badge ${s.status === 'running' ? 'badge-green' : 'badge-grey'}">${esc(s.status)}</span></td></tr>`).join('')
+    : '<tr><td colspan="5" class="muted" style="text-align:center;padding:22px;">No servers on this node.</td></tr>';
+}
+
+function command() {
+  return `sudo diablo-wings configure --panel ${location.origin} --node ${node.id} --token ${node.token}`;
+}
+function genCommand() { $('cmdText').textContent = command(); $('cmdWrap').classList.remove('hidden'); }
+async function copyCommand() {
+  try { await navigator.clipboard.writeText(command()); toast('Command copied'); }
+  catch (e) { const r = document.createRange(); r.selectNodeContents($('cmdText')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('Press Ctrl+C to copy', 'err'); }
+}
+
+async function saveSettings() {
+  const body = {
+    name: $('sName').value.trim(), description: $('sDesc').value.trim(), location: $('sLoc').value.trim(),
+    fqdn: $('sFqdn').value.trim(), ip: $('sIp').value.trim(), daemonPort: Number($('sPort').value),
+    scheme: $('sScheme').value, memory: Number($('sMem').value), disk: Number($('sDisk').value),
+    resetToken: $('sReset').checked
+  };
+  if (!body.name || !body.fqdn) return toast('Name and FQDN are required', 'err');
+  try {
+    await API.put('/api/admin/nodes/' + node.id, body);
+    $('sReset').checked = false; render.done = false;
+    toast(body.resetToken ? 'Saved — token reset, re-run the Auto-Deploy command on the node' : 'Settings saved');
+    await load();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function assign() {
+  try {
+    const r = await API.post(`/api/admin/nodes/${node.id}/allocations/assign`, { ip: $('aIp').value.trim(), alias: $('aAlias').value.trim(), ports: $('aPorts').value });
+    toast(`${r.created} allocation(s) added` + (r.skipped ? `, ${r.skipped} already existed` : ''));
+    $('aPorts').value = ''; await load();
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function setAlias(input) {
+  try { await API.put(`/api/admin/nodes/${node.id}/allocations/${input.dataset.id}`, { alias: input.value.trim() }); toast('Alias saved'); await load(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function deleteSelected() {
+  const ids = [...document.querySelectorAll('.allocSel:checked')].map(c => c.value);
+  if (!ids.length) return toast('Select at least one free allocation', 'err');
+  if (!confirm(`Delete ${ids.length} allocation(s)?`)) return;
+  try { const r = await API.post(`/api/admin/nodes/${node.id}/allocations/delete`, { ids }); toast(r.deleted + ' deleted'); $('selAll').checked = false; await load(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function delNode() {
+  if (!confirm('Delete this node? This cannot be undone.')) return;
+  try { await API.del('/api/admin/nodes/' + node.id); location.href = '/admin/nodes.html'; } catch (e) { toast(e.message, 'err'); }
+}
+setInterval(() => { if (node && !document.activeElement.matches('input,textarea,select')) load(); }, 15000);
+</script>
+</body>
+</html>

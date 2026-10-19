@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-dashboard">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="grid grid-4 mb" id="statsRow"></div>
+
+      <div class="grid grid-2 mb">
+        <div class="card">
+          <div class="flex" style="justify-content:space-between;">
+            <div>
+              <h3>AFK Coin Farm</h3>
+              <div class="muted">Stay on this page to earn coins automatically.</div>
+            </div>
+            <div class="coin-chip"><span class="c"><img class="ico-img" src="/assets/img/icons/coin.svg" alt=""></span> <span id="afkEarned">+0</span></div>
+          </div>
+          <div class="mt" style="display:flex;align-items:center;gap:14px;">
+            <div class="stat"><div class="ico"><img class="ico-img" src="/assets/img/icons/clock.svg" alt=""></div><div><div class="val" id="afkTimer">00:00</div><div class="lbl">Session time</div></div></div>
+            <button class="btn btn-primary" id="claimAfk">Claim coins</button>
+          </div>
+          <div class="muted mt-s" style="font-size:12.5px;">Rate: <span id="afkRate">5</span> coins / minute</div>
+        </div>
+
+        <div class="card">
+          <h3>Quick actions</h3>
+          <div class="muted mb">Jump straight into the most used tools.</div>
+          <div class="grid grid-2">
+            <a class="btn" href="/servers.html"><img class="ico-img" src="/assets/img/icons/server.svg" alt=""> My Servers</a>
+            <a class="btn" href="/servers.html?new=1"><img class="ico-img" src="/assets/img/icons/rocket.svg" alt=""> Create Server</a>
+            <a class="btn" href="/status.html"><img class="ico-img" src="/assets/img/icons/activity.svg" alt=""> Node Status</a>
+            <a class="btn" href="/store.html"><img class="ico-img" src="/assets/img/icons/cart.svg" alt=""> Coin Store</a>
+            <a class="btn" href="/coins.html"><img class="ico-img" src="/assets/img/icons/coin.svg" alt=""> My Coins</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-head"><h2>My Servers</h2><div class="spacer"></div><a class="btn btn-sm" href="/servers.html">Manage all</a></div>
+      <div class="grid grid-3" id="serverGrid"><div class="empty"><div class="big"><img class="ico-img" src="/assets/img/icons/clock.svg" alt=""></div>Loading servers…</div></div>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast } = window.Nova;
+let afkSeconds = 0, afkStart = Date.now();
+(async () => {
+  const user = await guard({ active: 'dashboard', title: 'Dashboard', subtitle: 'Welcome back, ' + 'player' });
+  if (!user) return;
+  loadStats(user);
+  loadServers();
+  startAfk();
+})();
+
+async function loadStats(user) {
+  let servers = [], coins = user.coins;
+  try {
+    const r = await API.get('/api/client/servers'); servers = r.servers;
+    const c = await API.get('/api/client/coins'); coins = c.coins;
+    document.getElementById('afkRate').textContent = c.afkRatePerMinute;
+  } catch (e) {}
+  const running = servers.filter(s => s.status === 'running').length;
+  const freeAlloc = servers.filter(s => s.productName && s.productName.includes('Free')).length;
+  const cards = [
+    { ico: '<img class="ico-img" src="/assets/img/icons/server.svg" alt="">', val: servers.length, lbl: 'My servers' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/dot.svg" alt="">', val: running, lbl: 'Running now' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/coin.svg" alt="">', val: fmt.coins(coins), lbl: 'Coin balance' },
+    { ico: '<img class="ico-img" src="/assets/img/icons/gift.svg" alt="">', val: servers.length ? servers.length : '0', lbl: 'Active plans' }
+  ];
+  document.getElementById('statsRow').innerHTML = cards.map(c =>
+    `<div class="card"><div class="stat"><div class="ico">${c.ico}</div><div><div class="val">${c.val}</div><div class="lbl">${c.lbl}</div></div></div></div>`
+  ).join('');
+}
+
+async function loadServers() {
+  const grid = document.getElementById('serverGrid');
+  try {
+    const { servers } = await API.get('/api/client/servers');
+    if (!servers.length) {
+      grid.innerHTML = `<div class="card empty" style="grid-column:1/-1;"><div class="big"><img class="ico-img" src="/assets/img/icons/server.svg" alt=""></div>No servers yet.<br><a class="btn btn-primary mt" href="/store.html">Create your first server</a></div>`;
+      return;
+    }
+    grid.innerHTML = servers.slice(0, 6).map(s => `
+      <div class="card tile">
+        <div class="top">
+          <div class="ic"><img class="ico-img" src="/assets/img/icons/grid.svg" alt=""></div>
+          <div><div class="name">${s.name}</div><div class="cat">${s.productName}</div></div>
+        </div>
+        <div class="specs">
+          <span class="spec">${fmt.mb(s.memory)} RAM</span>
+          <span class="spec">${s.cpu}% CPU</span>
+          <span class="spec">${fmt.mb(s.disk)} disk</span>
+        </div>
+        <div class="kv"><span class="k">Address</span><span class="v"><code>${s.address}</code></span></div>
+        <div class="kv"><span class="k">Version</span><span class="v">${s.version}</span></div>
+        <div class="foot">
+          <span class="badge ${s.status === 'running' ? 'badge-green' : 'badge-grey'}"><span class="dot ${s.status === 'running' ? 'dot-green' : 'dot-grey'}"></span>${s.status}</span>
+          <div class="spacer" style="flex:1"></div>
+          <a class="btn btn-sm" href="/servers.html">Manage</a>
+        </div>
+      </div>`).join('');
+  } catch (e) { grid.innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function startAfk() {
+  setInterval(() => {
+    afkSeconds++;
+    const m = String(Math.floor(afkSeconds / 60)).padStart(2, '0');
+    const s = String(afkSeconds % 60).padStart(2, '0');
+    document.getElementById('afkTimer').textContent = m + ':' + s;
+    const rate = Number(document.getElementById('afkRate').textContent) || 5;
+    document.getElementById('afkEarned').textContent = '+' + Math.floor(afkSeconds / 60) * rate;
+  }, 1000);
+  document.getElementById('claimAfk').addEventListener('click', async () => {
+    try {
+      const r = await API.post('/api/client/coins/afk');
+      window.Nova.setCoins(r.coins);
+      toast(r.earned > 0 ? `Earned ${r.earned} coins!` : 'No coins accrued yet — wait a minute.', r.earned > 0 ? 'ok' : 'err');
+      afkSeconds = 0; document.getElementById('afkEarned').textContent = '+0';
+    } catch (e) { toast(e.message, 'err'); }
+  });
+}
+</script>
+</body>
+</html>

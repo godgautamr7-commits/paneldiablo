@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>General</h3>
+          <div class="muted mb">Panel identity and economy settings.</div>
+          <div class="field"><label>Panel name</label><input id="panelName"></div>
+          <div class="row">
+            <div class="field"><label>Currency name</label><input id="currency"></div>
+            <div class="field"><label>AFK coins / minute</label><input id="afkRate" type="number"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Theming</h3>
+          <div class="muted mb">Background images for each area of the panel.</div>
+          <div class="field"><label>Login background URL</label><input id="tLogin"></div>
+          <div class="field"><label>Dashboard background URL</label><input id="tDash"></div>
+          <div class="field"><label>Panel background URL</label><input id="tPanel"></div>
+        </div>
+
+        <div class="card">
+          <h3>Google OAuth</h3>
+          <div class="muted mb">Enable "Sign in with Google".</div>
+          <label class="check mb"><input type="checkbox" id="gEnabled"> Enable Google login</label>
+          <div class="field"><label>Client ID</label><input id="gId" placeholder="xxxxx.apps.googleusercontent.com"></div>
+          <div class="field"><label>Client secret</label><input id="gSecret" type="password" placeholder="Leave blank to keep current"></div>
+          <div class="field"><label>Authorized redirect URI</label><input readonly id="gRedirect"></div>
+        </div>
+
+        <div class="card">
+          <h3>Discord OAuth</h3>
+          <div class="muted mb">Enable "Sign in with Discord".</div>
+          <label class="check mb"><input type="checkbox" id="dEnabled"> Enable Discord login</label>
+          <div class="field"><label>Client ID</label><input id="dId" placeholder="1234567890"></div>
+          <div class="field"><label>Client secret</label><input id="dSecret" type="password" placeholder="Leave blank to keep current"></div>
+          <div class="field"><label>Authorized redirect URI</label><input readonly id="dRedirect"></div>
+        </div>
+      </div>
+      <div class="mt"><button class="btn btn-primary" id="saveBtn">Save settings</button></div>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, guard, toast } = window.Nova;
+(async () => {
+  const user = await guard({ active: 'admin-settings', requireAdmin: true, title: 'Settings', subtitle: 'Panel configuration and integrations' });
+  if (!user) return;
+  const { settings } = await API.get('/api/admin/settings');
+  document.getElementById('panelName').value = settings.panelName;
+  document.getElementById('currency').value = settings.currency;
+  document.getElementById('afkRate').value = settings.afkRatePerMinute;
+  document.getElementById('tLogin').value = settings.theme.loginBackground;
+  document.getElementById('tDash').value = settings.theme.dashboardBackground;
+  document.getElementById('tPanel').value = settings.theme.panelBackground;
+  document.getElementById('gEnabled').checked = settings.oauth.google.enabled;
+  document.getElementById('gId').value = settings.oauth.google.clientId || '';
+  document.getElementById('dEnabled').checked = settings.oauth.discord.enabled;
+  document.getElementById('dId').value = settings.oauth.discord.clientId || '';
+  const base = location.origin;
+  document.getElementById('gRedirect').value = base + '/api/auth/oauth/google/callback';
+  document.getElementById('dRedirect').value = base + '/api/auth/oauth/discord/callback';
+  document.getElementById('saveBtn').onclick = save;
+})();
+async function save() {
+  const body = {
+    panelName: document.getElementById('panelName').value.trim(),
+    currency: document.getElementById('currency').value.trim(),
+    afkRatePerMinute: Number(document.getElementById('afkRate').value),
+    theme: {
+      loginBackground: document.getElementById('tLogin').value.trim(),
+      dashboardBackground: document.getElementById('tDash').value.trim(),
+      panelBackground: document.getElementById('tPanel').value.trim()
+    },
+    oauth: {
+      google: { enabled: document.getElementById('gEnabled').checked, clientId: document.getElementById('gId').value.trim(), clientSecret: document.getElementById('gSecret').value },
+      discord: { enabled: document.getElementById('dEnabled').checked, clientId: document.getElementById('dId').value.trim(), clientSecret: document.getElementById('dSecret').value }
+    }
+  };
+  try { await API.put('/api/admin/settings', body); toast('Settings saved'); } catch (e) { toast(e.message, 'err'); }
+}
+</script>
+</body>
+</html>

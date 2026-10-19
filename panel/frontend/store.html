@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coin Store · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="section-head"><h2>Coin Store</h2><div class="spacer"></div><div class="coin-chip"><span class="c"><img class="ico-img" src="/assets/img/icons/coin.svg" alt=""></span> <span id="bal">0</span></div></div>
+      <div class="section-head"><h3><img class="ico-img" src="/assets/img/icons/gift.svg" alt=""> Free Products</h3></div>
+      <div class="grid grid-3 mb" id="freeGrid"></div>
+      <div class="section-head"><h3><img class="ico-img" src="/assets/img/icons/gem.svg" alt=""> Paid Products</h3></div>
+      <div class="grid grid-3" id="paidGrid"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back" id="buyModal">
+  <div class="modal">
+    <h3 id="buyTitle">Create server</h3>
+    <div class="sub" id="buySub"></div>
+    <div class="field"><label>Server name</label><input type="text" id="buyName" placeholder="My Server"></div>
+    <div class="row">
+      <div class="field"><label>Node</label><select id="buyNode"></select></div>
+      <div class="field"><label>RAM upgrade</label><select id="buyUpgrade"></select></div>
+    </div>
+    <div id="buyInfo" class="alert alert-info"></div>
+    <div class="actions">
+      <button class="btn btn-ghost" data-close>Cancel</button>
+      <button class="btn btn-primary" id="buyConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast, openModal, closeModal } = window.Nova;
+let products = [], nodes = [], coins = 0, selected = null;
+(async () => {
+  const user = await guard({ active: 'store', title: 'Coin Store', subtitle: 'Redeem free plans or spend coins on upgrades' });
+  if (!user) return;
+  const [store, nodeRes] = await Promise.all([
+    API.get('/api/client/store'),
+    API.get('/api/client/nodes').catch(() => ({ nodes: [] }))
+  ]);
+  products = store.products; coins = store.coins; nodes = nodeRes.nodes;
+  document.getElementById('bal').textContent = fmt.coins(coins);
+  document.getElementById('buyNode').innerHTML = '<option value="">Auto</option>' + nodes.map(n => `<option value="${n.id}">${n.name} (${n.ip}) · ${n.freeAllocations} free</option>`).join('');
+  render();
+  document.getElementById('buyConfirm').onclick = confirmBuy;
+})();
+function card(p) {
+  const afford = p.free || coins >= p.price;
+  return `<div class="card tile">
+    <div class="top"><div class="ic">${p.free ? '<img class="ico-img" src="/assets/img/icons/gift.svg" alt="">' : '<img class="ico-img" src="/assets/img/icons/gem.svg" alt="">'}</div><div><div class="name">${p.name}</div><div class="cat">${p.free ? 'Free plan' : p.price + ' coins'} · ${p.expiryDays} days</div></div></div>
+    <div class="desc">${p.description}</div>
+    <div class="specs"><span class="spec">${fmt.mb(p.memory)} RAM</span><span class="spec">${p.cpu}% CPU</span><span class="spec">${fmt.mb(p.disk)} disk</span></div>
+    <div class="foot">
+      <span class="price-tag">${p.free ? 'FREE' : '<img class="ico-img" src="/assets/img/icons/coin.svg" alt=""> ' + fmt.coins(p.price)}</span>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn btn-sm ${p.free ? 'btn-primary' : ''}" ${afford ? '' : 'disabled'} onclick="buy('${p.id}')">${p.free ? 'Claim' : (afford ? 'Buy' : 'Not enough')}</button>
+    </div>
+  </div>`;
+}
+function render() {
+  document.getElementById('freeGrid').innerHTML = products.filter(p => p.free).map(card).join('') || '<div class="empty">No free products.</div>';
+  document.getElementById('paidGrid').innerHTML = products.filter(p => !p.free).map(card).join('') || '<div class="empty">No paid products.</div>';
+}
+function buy(id) {
+  selected = products.find(p => p.id === id);
+  document.getElementById('buyTitle').textContent = (selected.free ? 'Claim ' : 'Buy ') + selected.name;
+  document.getElementById('buySub').innerHTML = selected.free ? 'This plan is free.' : `Cost: <b class="price-tag">${selected.price} coins</b> · your balance: ${fmt.coins(coins)}`;
+  document.getElementById('buyUpgrade').innerHTML = '<option value="0">Base plan</option>' + (selected.upgradeOptions || []).map(g => `<option value="${g}">+${g} GB RAM</option>`).join('');
+  document.getElementById('buyInfo').innerHTML = `${fmt.mb(selected.memory)} RAM · ${selected.cpu}% CPU · ${fmt.mb(selected.disk)} disk · expires in ${selected.expiryDays} days`;
+  openModal('buyModal');
+}
+async function confirmBuy() {
+  const name = document.getElementById('buyName').value.trim();
+  if (!name) return toast('Enter a server name', 'err');
+  const btn = document.getElementById('buyConfirm'); btn.disabled = true; btn.innerHTML = '<span class="loading"></span>';
+  try {
+    await API.post('/api/client/servers', { name, productId: selected.id, nodeId: document.getElementById('buyNode').value || undefined, upgradeRam: document.getElementById('buyUpgrade').value });
+    toast('Server created!'); closeModal('buyModal');
+    const store = await API.get('/api/client/store'); coins = store.coins;
+    document.getElementById('bal').textContent = fmt.coins(coins); window.Nova.setCoins(coins);
+    document.getElementById('buyName').value = ''; render();
+  } catch (e) { toast(e.message, 'err'); }
+  btn.disabled = false; btn.textContent = 'Confirm';
+}
+window.buy = buy;
+</script>
+</body>
+</html>

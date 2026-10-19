@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Coins · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="grid grid-3 mb">
+        <div class="card"><div class="stat"><div class="ico"><img class="ico-img" src="/assets/img/icons/coin.svg" alt=""></div><div><div class="val" id="coinVal">0</div><div class="lbl">Coin balance</div></div></div></div>
+        <div class="card"><div class="stat"><div class="ico"><img class="ico-img" src="/assets/img/icons/clock.svg" alt=""></div><div><div class="val" id="afkTimer">00:00</div><div class="lbl">AFK session</div></div></div></div>
+        <div class="card"><div class="stat"><div class="ico"><img class="ico-img" src="/assets/img/icons/bolt.svg" alt=""></div><div><div class="val" id="afkRate">5</div><div class="lbl">Coins / minute</div></div></div></div>
+      </div>
+      <div class="card mb">
+        <div class="flex wrap" style="justify-content:space-between;">
+          <div><h3>AFK Coin Farm</h3><div class="muted">Keep this tab open — coins accrue every minute. Click claim to bank them.</div></div>
+          <button class="btn btn-primary" id="claimBtn">Claim coins</button>
+        </div>
+      </div>
+      <div class="card mb">
+        <h3>Redeem a coupon</h3>
+        <div class="muted mb">Got a code from an event or giveaway? Enter it to receive free coins.</div>
+        <div class="flex" style="gap:10px"><input id="couponCode" placeholder="ENTER-CODE" style="max-width:280px;text-transform:uppercase"><button class="btn btn-primary" id="redeemBtn">Redeem</button></div>
+      </div>
+      <div class="section-head"><h2>Transaction History</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Note</th><th>Balance</th></tr></thead>
+        <tbody id="txBody"><tr><td colspan="5" class="center muted">Loading…</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast } = window.Nova;
+let afkSeconds = 0;
+(async () => {
+  const user = await guard({ active: 'coins', title: 'My Coins & AFK', subtitle: 'Earn and track your coins' });
+  if (!user) return;
+  await load();
+  setInterval(() => { afkSeconds++; const m = String(Math.floor(afkSeconds/60)).padStart(2,'0'), s = String(afkSeconds%60).padStart(2,'0'); document.getElementById('afkTimer').textContent = m+':'+s; }, 1000);
+  document.getElementById('claimBtn').onclick = async () => {
+    try { const r = await API.post('/api/client/coins/afk'); window.Nova.setCoins(r.coins); document.getElementById('coinVal').textContent = fmt.coins(r.coins); toast(r.earned > 0 ? 'Earned ' + r.earned + ' coins!' : 'No coins yet — wait a minute.', r.earned>0?'ok':'err'); afkSeconds=0; await load(); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+})();
+async function load() {
+  const r = await API.get('/api/client/coins');
+  document.getElementById('coinVal').textContent = fmt.coins(r.coins);
+  document.getElementById('afkRate').textContent = r.afkRatePerMinute;
+  const tbody = document.getElementById('txBody');
+  if (!r.transactions.length) { tbody.innerHTML = '<tr><td colspan="5" class="center muted">No transactions yet.</td></tr>'; return; }
+  tbody.innerHTML = r.transactions.map(t => `<tr>
+    <td class="muted">${fmt.dateTime(t.createdAt)}</td>
+    <td><span class="badge ${t.amount > 0 ? 'badge-green' : 'badge-red'}">${t.type}</span></td>
+    <td style="font-weight:700;color:${t.amount > 0 ? '#5fe39a' : 'var(--danger)'}">${t.amount > 0 ? '+' : ''}${t.amount}</td>
+    <td>${t.note || '—'}</td>
+    <td>${fmt.coins(t.balanceAfter)}</td>
+  </tr>`).join('');
+}
+document.getElementById('redeemBtn').onclick = async () => {
+  const code = document.getElementById('couponCode').value.trim();
+  if (!code) return toast('Enter a coupon code', 'err');
+  try {
+    const r = await API.post('/api/client/coupons/redeem', { code });
+    toast('+' + r.coins + ' coins added!'); window.Nova.setCoins(r.balance);
+    const cv = document.getElementById('coinVal'); if (cv) cv.textContent = fmt.coins(r.balance);
+    document.getElementById('couponCode').value = ''; setTimeout(() => location.reload(), 900);
+  } catch (e) { toast(e.message, 'err'); }
+};
+</script>
+</body>
+</html>

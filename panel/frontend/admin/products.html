@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Products · Diablo Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+</head>
+<body class="bg-panel">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="section-head"><h2>Products</h2><div class="spacer"></div><button class="btn btn-primary" id="newBtn">＋ Create Product</button></div>
+      <div class="alert alert-info">Products define server plans. Mark a product <b>free</b> to give it away, or set a coin price. Configure RAM/CPU/disk, RAM upgrade options and expiry days.</div>
+      <div class="grid grid-3" id="grid"><div class="empty"><div class="big"><img class="ico-img" src="/assets/img/icons/clock.svg" alt=""></div>Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back" id="modal">
+  <div class="modal">
+    <h3 id="mTitle">Create Product</h3>
+    <div class="sub">Define the resources and pricing for this plan.</div>
+    <div class="field"><label>Name</label><input id="pName" placeholder="Basic 4GB"></div>
+    <div class="field"><label>Description</label><textarea id="pDesc" placeholder="Short description shown in the store"></textarea></div>
+    <div class="row-3">
+      <div class="field"><label>Memory (MB)</label><input id="pMem" type="number" value="4096"></div>
+      <div class="field"><label>CPU (%)</label><input id="pCpu" type="number" value="200"></div>
+      <div class="field"><label>Disk (MB)</label><input id="pDisk" type="number" value="20480"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Price (coins)</label><input id="pPrice" type="number" value="500"></div>
+      <div class="field"><label>Expiry (days)</label><input id="pExpiry" type="number" value="30"></div>
+    </div>
+    <div class="field"><label>RAM upgrade options (GB, comma separated)</label><input id="pUpg" value="1,2,4,8"></div>
+    <label class="check"><input type="checkbox" id="pFree"> This is a free product</label>
+    <div class="actions"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="saveBtn">Save</button></div>
+  </div>
+</div>
+
+<script src="/assets/js/app.js"></script>
+<script>
+const { API, fmt, guard, toast, openModal, closeModal } = window.Nova;
+let products = [], editing = null;
+(async () => {
+  const user = await guard({ active: 'admin-products', requireAdmin: true, title: 'Products', subtitle: 'Plans, pricing and resource limits' });
+  if (!user) return;
+  await load();
+  document.getElementById('newBtn').onclick = () => openModal2(null);
+  document.getElementById('saveBtn').onclick = save;
+})();
+async function load() { products = (await API.get('/api/admin/products')).products; render(); }
+function render() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = products.length ? products.map(p => `
+    <div class="card tile">
+      <div class="top"><div class="ic">${p.free ? '<img class="ico-img" src="/assets/img/icons/gift.svg" alt="">' : '<img class="ico-img" src="/assets/img/icons/gem.svg" alt="">'}</div><div><div class="name">${p.name}</div><div class="cat">${p.free ? 'Free' : p.price + ' coins'} · ${p.expiryDays} days</div></div></div>
+      <div class="desc">${p.description || '<span class="muted">No description</span>'}</div>
+      <div class="specs"><span class="spec">${fmt.mb(p.memory)} RAM</span><span class="spec">${p.cpu}% CPU</span><span class="spec">${fmt.mb(p.disk)} disk</span><span class="spec">+${(p.upgradeOptions||[]).join('/')} GB</span></div>
+      <div class="foot">
+        <span class="badge ${p.free ? 'badge-green' : 'badge-amber'}">${p.free ? 'FREE' : 'PAID'}</span>
+        <div class="spacer" style="flex:1"></div>
+        <button class="btn btn-sm" onclick="edit('${p.id}')"><img class="ico-img" src="/assets/img/icons/edit.svg" alt=""> Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="del('${p.id}')">Delete</button>
+      </div>
+    </div>`).join('') : '<div class="empty" style="grid-column:1/-1;">No products yet.</div>';
+}
+function openModal2(p) {
+  editing = p;
+  document.getElementById('mTitle').textContent = p ? 'Edit Product' : 'Create Product';
+  document.getElementById('pName').value = p ? p.name : '';
+  document.getElementById('pDesc').value = p ? p.description : '';
+  document.getElementById('pMem').value = p ? p.memory : 4096;
+  document.getElementById('pCpu').value = p ? p.cpu : 200;
+  document.getElementById('pDisk').value = p ? p.disk : 20480;
+  document.getElementById('pPrice').value = p ? p.price : 500;
+  document.getElementById('pExpiry').value = p ? p.expiryDays : 30;
+  document.getElementById('pUpg').value = p ? (p.upgradeOptions||[]).join(',') : '1,2,4,8';
+  document.getElementById('pFree').checked = p ? !!p.free : false;
+  openModal('modal');
+}
+function edit(id) { openModal2(products.find(p => p.id === id)); }
+async function save() {
+  const body = {
+    name: document.getElementById('pName').value.trim(),
+    description: document.getElementById('pDesc').value.trim(),
+    memory: Number(document.getElementById('pMem').value),
+    cpu: Number(document.getElementById('pCpu').value),
+    disk: Number(document.getElementById('pDisk').value),
+    price: Number(document.getElementById('pPrice').value),
+    expiryDays: Number(document.getElementById('pExpiry').value),
+    upgradeOptions: document.getElementById('pUpg').value.split(',').map(s => Number(s.trim())).filter(Boolean),
+    free: document.getElementById('pFree').checked
+  };
+  if (!body.name) return toast('Name required', 'err');
+  try {
+    if (editing) await API.put('/api/admin/products/' + editing.id, body); else await API.post('/api/admin/products', body);
+    toast('Product saved'); closeModal('modal'); await load();
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function del(id) { if (!confirm('Delete this product?')) return; try { await API.del('/api/admin/products/' + id); toast('Deleted'); await load(); } catch (e) { toast(e.message, 'err'); } }
+window.edit = edit; window.del = del;
+</script>
+</body>
+</html>
